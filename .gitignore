@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-app/
+
+# Local user data (CONFIDENTIAL - never commit)
+data/
+uploads/
+outputs/
+*.log
+
+# Bundled binaries (downloaded during build / CI)
+bin/*.exe
+bin/ffmpeg
+bin/ffprobe
+bin/yt-dlp
+bin/deno
+
+# Secrets / local config (CONFIDENTIAL)
+docker-compose.yml
+config.env
+secret.json
+*.cookies.txt
+youtube-cookies.txt
+
+# OS / editor
+.DS_Store
+Thumbs.db

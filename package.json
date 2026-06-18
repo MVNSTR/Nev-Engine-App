@@ -1,0 +1,82 @@
+{
+  "name": "nev-discord-audio-engine",
+  "version": "2.0.0",
+  "description": "NEV Audio Engine - Roblox audio converter & uploader",
+  "author": "NEV",
+  "main": "electron/main.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "app": "electron .",
+    "dist:win": "electron-builder --win --x64",
+    "dist:linux": "electron-builder --linux",
+    "build:win": "pkg . --targets node22-win-x64 --output dist/NEV-Audio-Engine.exe && node scripts/assemble.js win"
+  },
+  "dependencies": {
+    "express": "^4.18.3",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.3.0",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.nev.audioengine",
+    "productName": "NEV Audio Engine",
+    "asar": false,
+    "files": [
+      "electron/**/*",
+      "server.js",
+      "public/**/*",
+      "node_modules/**/*",
+      "!dist/**",
+      "!data/**"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "app/bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NEV Audio Engine"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo"
+    },
+    "directories": {
+      "output": "dist-app",
+      "buildResources": "electron"
+    }
+  },
+  "pkg": {
+    "scripts": [],
+    "assets": [],
+    "targets": [
+      "node22-win-x64"
+    ],
+    "outputPath": "dist"
+  }
+}

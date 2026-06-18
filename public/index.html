@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0f0c" />
+  <title>NEV - Audio Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#070b09;--bg2:#0a0f0c;--panel:#0e1613;--panel2:#0b110e;--border:rgba(148,196,170,.12);--border2:rgba(148,196,170,.24);
+      --text:#eef5f1;--muted:#8b9d94;--orange:#22c55e;--orange2:#4ade80;--green:#22c55e;--red:#ef4444;--blue:#60a5fa;--whitechip:rgba(255,255,255,.10);
+      --accent:#22c55e;--accent2:#34d399;--accent-soft:rgba(34,197,94,.12);
+      --radius:16px;--radius-sm:11px;--maxw:1280px;
+      --sp1:8px;--sp2:12px;--sp3:18px;--sp4:24px;--sp5:32px;--sp6:48px;
+      --shadow:0 30px 90px rgba(0,0,0,.5),0 8px 30px rgba(0,0,0,.35);
+      --glow:0 0 0 1px rgba(34,197,94,.25),0 12px 40px rgba(34,197,94,.22);
+      --ease:cubic-bezier(.4,0,.2,1)
+    }
+    *{box-sizing:border-box}
+    ::selection{background:rgba(34,197,94,.3);color:#fff}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;min-height:100vh;position:relative;overflow-x:hidden;
+      font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      color:var(--text);font-feature-settings:"cv02","cv03","cv04","cv11";
+      -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+      background:
+        radial-gradient(900px 500px at 12% -8%,rgba(34,197,94,.16),transparent 60%),
+        radial-gradient(800px 600px at 100% 0%,rgba(16,185,129,.10),transparent 55%),
+        radial-gradient(700px 700px at 50% 120%,rgba(34,197,94,.08),transparent 60%),
+        linear-gradient(160deg,#070b09 0%,#0a0f12 45%,#070d0a 100%);
+      background-attachment:fixed;
+    }
+    /* animated ambient orbs */
+    body::before,body::after{content:"";position:fixed;border-radius:50%;filter:blur(80px);opacity:.5;z-index:0;pointer-events:none}
+    body::before{width:520px;height:520px;top:-180px;left:-120px;background:radial-gradient(circle,rgba(34,197,94,.35),transparent 70%);animation:float1 16s var(--ease) infinite}
+    body::after{width:460px;height:460px;bottom:-160px;right:-120px;background:radial-gradient(circle,rgba(16,185,129,.28),transparent 70%);animation:float2 19s var(--ease) infinite}
+    @keyframes float1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(60px,40px) scale(1.12)}}
+    @keyframes float2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-50px,-40px) scale(1.1)}}
+    @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+    /* scrollbars */
+    ::-webkit-scrollbar{width:10px;height:10px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(148,196,170,.18);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(34,197,94,.4);background-clip:padding-box}
+
+    button,input,select,textarea{font:inherit}
+    :focus-visible{outline:2px solid var(--accent2);outline-offset:2px;border-radius:6px}
+    .btn:focus-visible,.nav button:focus-visible,.tab:focus-visible,.preset button:focus-visible,.mini:focus-visible,.download:focus-visible{outline:2px solid var(--accent2);outline-offset:3px}
+    .input:focus-visible,.select:focus-visible,.textarea:focus-visible{outline:none}
+    .app{position:relative;z-index:1;width:min(var(--maxw),calc(100% - 40px));margin:0 auto;padding:28px 0 72px;animation:fadeUp .6s var(--ease) both}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+    /* ===== Top bar ===== */
+    .top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px;padding:13px 18px;
+      border:1px solid var(--border);background:rgba(14,22,19,.6);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+      border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.35);position:sticky;top:14px;z-index:30}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:-.02em}
+    .brand-mark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04130b;box-shadow:0 8px 24px rgba(34,197,94,.4);font-size:18px}
+    .brand-name{font-size:14px;line-height:1.1;background:linear-gradient(90deg,#fff,#bbf7d0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+    .nav{display:flex;gap:4px;padding:5px;border:1px solid var(--border);background:rgba(8,12,10,.55);border-radius:12px}
+    .nav button{height:38px;padding:0 18px;border:0;border-radius:8px;background:transparent;color:#c6d4cc;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .2s var(--ease);position:relative;white-space:nowrap}
+    .nav button:hover{color:#fff;background:rgba(255,255,255,.05);transform:translateY(-1px)}
+    .nav button.active{background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.1));color:#bbf7d0;box-shadow:inset 0 0 0 1px rgba(34,197,94,.3)}
+
+    .kicker{display:inline-flex;align-items:center;gap:7px;color:var(--accent2);text-transform:uppercase;letter-spacing:.22em;font-size:10.5px;font-weight:800;margin-bottom:12px}
+    .kicker::before{content:"";width:18px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--accent),transparent)}
+
+    /* ===== Hero ===== */
+    .hero{display:grid;grid-template-columns:minmax(0,1fr) auto;justify-content:space-between;align-items:center;gap:32px;margin-bottom:22px;padding:40px;
+      border:1px solid var(--border);border-radius:20px;position:relative;overflow:hidden;
+      background:linear-gradient(135deg,rgba(16,26,21,.85),rgba(9,15,12,.6));box-shadow:var(--shadow)}
+    .hero::after{content:"";position:absolute;inset:0;background:radial-gradient(600px 200px at 90% -20%,rgba(34,197,94,.18),transparent 70%);pointer-events:none}
+    .hero>*{position:relative;z-index:1}
+    .hero h1{margin:0;font-size:clamp(28px,3.6vw,46px);font-weight:900;line-height:1.04;letter-spacing:-.04em;max-width:680px;
+      background:linear-gradient(180deg,#fff 30%,#c4e9d4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+    .hero p{margin:14px 0 0;color:var(--muted);font-size:14.5px;line-height:1.7;max-width:620px}
+    .hero-actions{display:flex;gap:10px;flex-wrap:wrap}
+    .hero-copy{max-width:640px}
+    .feature-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+    .chip{display:inline-flex;align-items:center;gap:7px;height:31px;padding:0 13px;border-radius:999px;border:1px solid var(--border2);background:rgba(255,255,255,.03);color:#cfe0d6;font-size:11.5px;font-weight:600;transition:border-color .2s var(--ease),transform .2s var(--ease)}
+    .chip:hover{border-color:rgba(34,197,94,.4);transform:translateY(-1px)}
+    .chip svg{width:14px;height:14px;color:var(--accent2);flex:none}
+    .hero-visual{display:flex;flex-direction:column;align-items:stretch;gap:16px;min-width:220px}
+    .eq{display:flex;align-items:flex-end;justify-content:center;gap:6px;height:96px;padding:16px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,rgba(7,11,9,.7),rgba(12,20,16,.5));box-shadow:inset 0 0 30px rgba(34,197,94,.06)}
+    .eq span{width:7px;height:30px;border-radius:6px;background:linear-gradient(180deg,var(--accent2),var(--accent));animation:eq 1.1s var(--ease) infinite}
+    .eq span:nth-child(1){animation-delay:-.2s}.eq span:nth-child(2){animation-delay:-.5s}.eq span:nth-child(3){animation-delay:-.1s}.eq span:nth-child(4){animation-delay:-.8s}.eq span:nth-child(5){animation-delay:-.35s}.eq span:nth-child(6){animation-delay:-.65s}.eq span:nth-child(7){animation-delay:-.45s}.eq span:nth-child(8){animation-delay:-.15s}.eq span:nth-child(9){animation-delay:-.55s}
+    @keyframes eq{0%,100%{height:16px;opacity:.7}50%{height:60px;opacity:1}}
+
+    /* card header icon badge */
+    .ct{display:flex;align-items:center;gap:13px;min-width:0}
+    .card-ico{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;color:var(--accent2);background:var(--accent-soft);border:1px solid rgba(34,197,94,.22)}
+    .card-ico svg{width:20px;height:20px}
+
+    /* nav icons */
+    .nav button{display:inline-flex;align-items:center;gap:8px}
+    .nav button svg{width:15px;height:15px}
+
+    /* ===== Buttons ===== */
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:11px;border:1px solid var(--border2);
+      background:rgba(255,255,255,.04);color:var(--text);font-size:12.5px;font-weight:700;padding:0 18px;cursor:pointer;
+      transition:transform .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease),filter .18s var(--ease)}
+    .btn:hover{transform:translateY(-2px);border-color:rgba(148,196,170,.4);background:rgba(255,255,255,.07);box-shadow:0 10px 26px rgba(0,0,0,.4)}
+    .btn:active{transform:translateY(0)}
+    .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+    .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#04130b;font-weight:800;box-shadow:0 10px 28px rgba(34,197,94,.35)}
+    .btn.primary:hover{filter:brightness(1.07);box-shadow:0 16px 40px rgba(34,197,94,.5)}
+    .btn.primary:disabled{filter:grayscale(.4)}
+    .btn.full{width:100%}
+    .btn.red{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:#fecaca}
+    .btn.red:hover{background:rgba(239,68,68,.2)}
+    .btn.green{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:#bbf7d0}
+    .btn.ghost{background:rgba(255,255,255,.03)}
+
+    /* ===== Layout / Cards ===== */
+    .grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);gap:22px;align-items:start}
+    .stack{display:grid;gap:22px}
+    .card{position:relative;background:linear-gradient(180deg,rgba(16,25,20,.92),rgba(11,17,14,.92));border:1px solid var(--border);border-radius:var(--radius);
+      box-shadow:0 18px 50px rgba(0,0,0,.32);overflow:hidden;transition:border-color .25s var(--ease),box-shadow .25s var(--ease),transform .25s var(--ease)}
+    .card::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(34,197,94,.55),transparent);opacity:0;transition:opacity .3s var(--ease);pointer-events:none}
+    .card:hover{transform:translateY(-3px);border-color:rgba(34,197,94,.22);box-shadow:0 28px 66px rgba(0,0,0,.42),0 0 0 1px rgba(34,197,94,.08)}
+    .card:hover::before{opacity:1}
+    .card .card{transition:border-color .25s var(--ease)}
+    .card .card::before{display:none}
+    .card .card:hover{transform:none;box-shadow:none;border-color:rgba(34,197,94,.2)}
+    .card-head{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(8,12,10,.35)}
+    .card-title{font-size:17px;font-weight:800;letter-spacing:-.01em}
+    .card-desc{margin-top:5px;color:var(--muted);font-size:12px;line-height:1.45}
+    .card-body{padding:18px}
+    .pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:8px;background:var(--accent-soft);
+      border:1px solid rgba(34,197,94,.3);color:var(--accent2);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+    .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 8px var(--accent2);animation:pulse 2s var(--ease) infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .form-row{margin-bottom:15px}
+    label{display:block;margin-bottom:8px;color:#cfe0d6;font-size:12px;font-weight:700;letter-spacing:.01em}
+    .input,.select,.textarea{width:100%;height:44px;border:1px solid var(--border2);background:rgba(7,11,9,.7);color:var(--text);border-radius:11px;padding:0 14px;outline:0;font-size:13.5px;transition:border-color .2s var(--ease),box-shadow .2s var(--ease),background .2s var(--ease)}
+    .input::placeholder,.textarea::placeholder{color:#5e6f66}
+    .textarea{height:auto;min-height:82px;padding:12px 14px;resize:vertical;line-height:1.5}
+    .input:hover,.select:hover,.textarea:hover{border-color:rgba(148,196,170,.35)}
+    .input:focus,.select:focus,.textarea:focus{border-color:var(--accent);background:rgba(7,11,9,.95);box-shadow:0 0 0 4px rgba(34,197,94,.14)}
+    .select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b9d94' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:38px}
+
+    /* ===== Tabs / upload ===== */
+    .tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:15px;padding:5px;background:rgba(7,11,9,.6);border:1px solid var(--border);border-radius:13px}
+    .tab{height:40px;border:0;background:transparent;color:var(--muted);border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .2s var(--ease)}
+    .tab:hover{color:#fff}
+    .tab.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04130b;box-shadow:0 6px 18px rgba(34,197,94,.32)}
+    .drop{min-height:160px;border:1.5px dashed rgba(148,196,170,.3);background:rgba(7,11,9,.4);border-radius:14px;display:grid;place-items:center;text-align:center;padding:22px;cursor:pointer;transition:all .25s var(--ease)}
+    .drop:hover,.drop.drag{border-color:var(--accent);background:rgba(34,197,94,.06);transform:scale(1.005)}
+    .drop.drag{box-shadow:0 0 0 4px rgba(34,197,94,.12)}
+    .plus{width:48px;height:48px;margin:0 auto 14px;border-radius:13px;display:grid;place-items:center;color:#04130b;font-size:24px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 8px 22px rgba(34,197,94,.4);transition:transform .25s var(--ease)}
+    .drop:hover .plus{transform:translateY(-3px) rotate(90deg)}
+    .drop strong{display:block;font-size:14.5px;font-weight:700}
+    .drop span,.small{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+    .file-name{margin-top:11px;color:var(--accent2);font-size:12px;font-weight:700}
+    input[type=file]{display:none}
+    .hint{border:1px solid rgba(34,197,94,.26);background:rgba(34,197,94,.07);color:#a7e9c4;border-radius:11px;padding:11px 13px;font-size:12px;line-height:1.55}
+
+    .preset{display:flex;flex-wrap:wrap;gap:8px}
+    .preset button{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--border2);background:rgba(7,11,9,.6);color:#c6d4cc;font-size:12px;font-weight:700;cursor:pointer;transition:all .18s var(--ease)}
+    .preset button:hover{border-color:rgba(34,197,94,.45);color:#fff;transform:translateY(-1px)}
+    .preset button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#04130b;box-shadow:0 6px 16px rgba(34,197,94,.3)}
+    .formula{margin-top:12px;border:1px solid var(--border);background:rgba(7,11,9,.55);border-radius:11px;padding:13px;color:#b6c7bd;font-size:12px;line-height:1.6;font-family:'JetBrains Mono',ui-monospace,monospace}
+    .formula b{color:var(--accent2)}
+    input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;background:rgba(255,255,255,.1);outline:0;margin:10px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));cursor:pointer;border:3px solid #0a0f0c;box-shadow:0 0 0 1px rgba(34,197,94,.5),0 4px 12px rgba(34,197,94,.4);transition:transform .15s var(--ease)}
+    input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18)}
+    input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid #0a0f0c}
+
+    /* ===== Process / log ===== */
+    .state{border:1px solid var(--border);background:rgba(7,11,9,.55);border-radius:12px;padding:13px;display:flex;gap:12px;align-items:center;margin-bottom:13px;transition:border-color .3s var(--ease),background .3s var(--ease)}
+    .spinner{width:18px;height:18px;flex:none;border-radius:50%;position:relative;border:2.5px solid rgba(255,255,255,.14);border-top-color:rgba(255,255,255,.3);transition:border-color .3s var(--ease),background .3s var(--ease)}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    /* idle: static dim ring */
+    .state.idle .spinner{border-top-color:rgba(255,255,255,.28);animation:none}
+    /* active: spinning accent ring */
+    .state.active{border-color:rgba(34,197,94,.28)}
+    .state.active .spinner{border-top-color:var(--accent2);animation:spin .75s linear infinite}
+    /* done: solid green ring with checkmark */
+    .state.done{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)}
+    .state.done .spinner{border-color:var(--accent);background:var(--accent);animation:none}
+    .state.done .spinner::after{content:"";position:absolute;left:5px;top:1.5px;width:4px;height:8px;border:solid #04130b;border-width:0 2.5px 2.5px 0;transform:rotate(43deg);animation:pop .3s var(--ease) both}
+    /* error: solid red ring with cross */
+    .state.error{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.06)}
+    .state.error .spinner{border-color:var(--red);background:var(--red);animation:none}
+    .state.error .spinner::before,.state.error .spinner::after{content:"";position:absolute;left:7.5px;top:3px;width:2px;height:10px;border-radius:2px;background:#fff;animation:pop .3s var(--ease) both}
+    .state.error .spinner::before{transform:rotate(45deg)}
+    .state.error .spinner::after{transform:rotate(-45deg)}
+    @keyframes pop{from{opacity:0;transform:scale(.4) rotate(43deg)}to{opacity:1}}
+    .state-title{font-size:13px;font-weight:800;transition:color .3s var(--ease)}
+    .state.done .state-title{color:var(--accent2)}
+    .state.error .state-title{color:#fecaca}
+    .state-sub{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4}
+    .log{height:250px;overflow:auto;border:1px solid var(--border);background:rgba(5,8,6,.7);border-radius:12px;padding:11px;font:12px/1.6 'JetBrains Mono',ui-monospace,Consolas,monospace;scroll-behavior:smooth}
+    .log-line{padding:7px 4px;border-bottom:1px solid rgba(148,196,170,.07);animation:logIn .3s var(--ease) both}
+    .log-line:last-child{border-bottom:0}
+    @keyframes logIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+    .log-time{color:var(--accent2);margin-right:9px}
+    .result{display:none;margin-top:15px;border:1px solid rgba(34,197,94,.28);background:rgba(34,197,94,.08);color:#a7e9c4;border-radius:12px;padding:14px;font-size:12.5px;line-height:1.65;animation:fadeUp .35s var(--ease) both}
+    .download,.mini{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--border2);background:rgba(11,17,14,.8);color:#dbe7e0;border-radius:9px;font-size:11px;font-weight:700;text-decoration:none;cursor:pointer;transition:all .18s var(--ease)}
+    .mini:hover{border-color:rgba(34,197,94,.45);color:#fff;transform:translateY(-1px)}
+    .download{margin:8px 6px 0 0;color:#a7e9c4;border-color:rgba(34,197,94,.36)}
+    .download:hover{background:rgba(34,197,94,.14);transform:translateY(-1px)}
+
+    /* ===== Lists / items ===== */
+    .list{display:grid;gap:10px}
+    .item{border:1px solid var(--border);background:rgba(11,17,14,.8);border-radius:13px;padding:14px;transition:border-color .2s var(--ease),transform .2s var(--ease),box-shadow .2s var(--ease)}
+    .item:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,.3)}
+    .item.clickable{cursor:pointer}
+    .item.clickable:hover{border-color:var(--accent)}
+    .item-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .item-title{font-size:13.5px;font-weight:800}
+    .item-meta{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+    .item-meta b{color:#cfe0d6}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .status{height:24px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border-radius:8px;font-size:10px;text-transform:uppercase;font-weight:800;letter-spacing:.04em;border:1px solid transparent}
+    .checking,.pending{color:#e9eef2;background:var(--whitechip);border-color:rgba(255,255,255,.12)}
+    .available,.done{color:#bbf7d0;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3)}
+    .failed{color:#fecaca;background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.32)}
+    .processing,.queued,.partial{color:#bbf7d0;background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.26)}
+    .expired,.not_started{color:#cbd5e1;background:rgba(148,163,184,.14);border-color:rgba(148,163,184,.2)}
+    .empty{border:1.5px dashed var(--border2);background:rgba(7,11,9,.4);border-radius:13px;padding:30px 16px;text-align:center;color:var(--muted);font-size:13px}
+
+    .panel{display:none}
+    .panel.active{display:block;animation:fadeUp .4s var(--ease) both}
+    .table{width:100%;border-collapse:collapse;font-size:12.5px}
+    .table th{text-align:left;color:#9fb8ac;background:rgba(7,11,9,.55);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+    .table th,.table td{padding:14px 13px;border-bottom:1px solid var(--border)}
+    .table tbody tr{transition:background .15s var(--ease)}
+    .table tr:hover td{background:rgba(34,197,94,.05)}
+
+    /* ===== Modal ===== */
+    .modal-bg{position:fixed;inset:0;background:rgba(3,6,4,.72);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:18px;z-index:60;
+      opacity:0;visibility:hidden;transition:opacity .3s var(--ease),visibility .3s var(--ease)}
+    .modal-bg.open{opacity:1;visibility:visible}
+    .modal{width:min(720px,100%);max-height:92vh;overflow:auto;background:linear-gradient(180deg,#101a15,#0b110e);border:1px solid var(--border2);border-radius:18px;box-shadow:0 40px 120px rgba(0,0,0,.65);
+      opacity:0;transform:translateY(26px) scale(.96);transition:opacity .35s var(--ease),transform .35s var(--ease)}
+    .modal-bg.open .modal{opacity:1;transform:none}
+    .modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .modal-head h3{margin:0;font-size:16px;font-weight:800}
+    .modal-body{padding:20px}
+    .account-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .footer-row{display:flex;gap:8px;flex-wrap:wrap}
+    .right-mini{display:grid;gap:22px}
+    .footer{margin-top:48px;color:#5b6c63;font-size:12px;text-align:center}
+
+    /* ===== Login ===== */
+    .login-view{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:22px}
+    .login-card{width:min(430px,100%);background:linear-gradient(180deg,rgba(16,26,21,.92),rgba(10,16,13,.92));border:1px solid var(--border);border-radius:22px;box-shadow:var(--shadow);padding:34px;text-align:center;animation:fadeUp .6s var(--ease) both;backdrop-filter:blur(16px)}
+    .login-logo{width:64px;height:64px;margin:0 auto 20px;border-radius:18px;display:grid;place-items:center;font-size:30px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04130b;box-shadow:0 14px 40px rgba(34,197,94,.45)}
+    .login-card .kicker{justify-content:center}
+    .login-title{font-size:28px;font-weight:900;letter-spacing:-.04em;margin:0 0 10px}
+    .login-text{color:var(--muted);font-size:13.5px;line-height:1.7;margin:0 0 22px}
+    #appRoot{display:none}
+
+    .userbar{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+    .profile{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:rgba(7,11,9,.6);border-radius:12px;padding:6px 10px 6px 6px;transition:border-color .2s var(--ease)}
+    .profile:hover{border-color:rgba(34,197,94,.3)}
+    .avatar{width:32px;height:32px;border-radius:9px;object-fit:cover;background:#13201a;border:1px solid var(--border2);display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--accent2)}
+    .profile-name{font-size:12.5px;font-weight:800;line-height:1.1;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .profile-sub{font-size:10px;color:var(--muted);margin-top:2px}
+
+    /* ===== Admin ===== */
+    .admin-grid{display:grid;gap:10px}
+    .admin-row{display:grid;grid-template-columns:minmax(160px,1fr) 90px 90px 90px 110px 110px;gap:10px;align-items:center;border:1px solid var(--border);background:rgba(11,17,14,.8);border-radius:13px;padding:12px;transition:border-color .2s var(--ease)}
+    .admin-row:hover{border-color:rgba(34,197,94,.22)}
+    .admin-row input{height:36px}
+    .online-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:6px;box-shadow:0 0 10px rgba(34,197,94,.8);animation:pulse 2s var(--ease) infinite}
+    .offline-dot{width:8px;height:8px;border-radius:50%;background:#5b6c63;display:inline-block;margin-right:6px}
+
+    /* ===== Limits ===== */
+    .limit-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .limit-box{border:1px solid var(--border);background:rgba(7,11,9,.55);border-radius:13px;padding:14px;transition:border-color .2s var(--ease)}
+    .limit-box:hover{border-color:rgba(34,197,94,.25)}
+    .limit-label{font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+    .limit-value{font-size:26px;font-weight:900;margin-top:5px;letter-spacing:-.02em}
+    .limit-bar{height:8px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;margin-top:11px}
+    .limit-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:999px;transition:width .5s var(--ease);box-shadow:0 0 12px rgba(34,197,94,.5)}
+
+    /* ===== Responsive ===== */
+    @media(min-width:1500px){
+      :root{--maxw:1400px}
+      .grid{gap:26px;grid-template-columns:minmax(0,1.2fr) minmax(380px,.8fr)}
+      .stack,.right-mini{gap:26px}
+      .hero{padding:52px}
+      .hero h1{font-size:clamp(40px,3vw,52px)}
+      .card-body{padding:22px}
+      .card-head{padding:18px 22px}
+    }
+    @media(max-width:900px){
+      .app{width:min(100% - 24px,960px)}
+      .top{flex-wrap:wrap;justify-content:center;position:static}
+      .nav{width:100%;justify-content:center;overflow-x:auto}
+      .userbar{width:100%;justify-content:center}
+      .hero{grid-template-columns:1fr;align-items:start}
+      .grid{grid-template-columns:1fr}
+      .row2,.account-grid{grid-template-columns:1fr}
+      .hero-actions{justify-content:flex-start}
+      .admin-row{grid-template-columns:1fr 1fr;gap:8px}
+    }
+    @media(max-width:560px){
+      .app{width:calc(100% - 24px);padding:18px 0 48px}
+      .top{padding:12px;gap:12px}
+      .nav button{padding:0 13px;font-size:12px}
+      .hero{padding:22px}
+      .eq{height:72px}
+      .card-body{padding:15px}
+      .tabs{grid-template-columns:1fr 1fr}
+      .limit-grid{grid-template-columns:1fr}
+      .login-card{padding:26px}
+    }
+  </style>
+</head>
+<body>
+  <div class="login-view" id="loginView">
+    <div class="login-card">
+      <div class="login-logo">🎧</div>
+      <div class="kicker">Discord Login</div>
+      <h1 class="login-title">NEV Audio Engine</h1>
+      <p class="login-text">Login with Discord to keep your conversion history, playable IDs, and Roblox accounts separated from other users.</p>
+      <a class="btn primary full" href="/auth/discord" style="text-decoration:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.885 3c-.21.375-.444.88-.608 1.28a18.27 18.27 0 0 0-5.487 0A12.6 12.6 0 0 0 9.18 3a19.74 19.74 0 0 0-4.435 1.37C2.06 8.35 1.33 12.22 1.69 16.04a19.92 19.92 0 0 0 5.993 3.03c.484-.66.915-1.36 1.286-2.094-.71-.266-1.39-.595-2.03-.984.17-.124.336-.254.497-.388 3.91 1.79 8.14 1.79 12.004 0 .163.135.33.265.5.388-.642.39-1.323.72-2.033.985.37.73.8 1.43 1.285 2.092a19.86 19.86 0 0 0 5.996-3.03c.42-4.43-.717-8.27-2.157-11.67ZM8.02 13.65c-1.182 0-2.157-1.085-2.157-2.42 0-1.334.953-2.42 2.157-2.42 1.214 0 2.18 1.097 2.157 2.42 0 1.335-.953 2.42-2.157 2.42Zm7.96 0c-1.18 0-2.157-1.085-2.157-2.42 0-1.334.954-2.42 2.157-2.42 1.215 0 2.18 1.097 2.158 2.42 0 1.335-.943 2.42-2.158 2.42Z"/></svg>
+        Login with Discord
+      </a>
+      <div class="hint" style="margin-top:16px">❤️❤️❤️</div>
+    </div>
+  </div>
+
+  <div class="app" id="appRoot">
+    <header class="top">
+      <div class="brand"><span class="brand-mark">🎧</span><span><span class="brand-name">NEV AUDIO ENGINE</span><div class="small">gaperlu cape cape!</div></span></div>
+      <nav class="nav">
+        <button class="active" data-panel="converter" onclick="openPanel('converter')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Converter</button>
+        <button data-panel="output" onclick="openPanel('output')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Output</button>
+        <button data-panel="history" onclick="openPanel('history')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>History</button>
+        <button id="adminNavBtn" data-panel="admin" onclick="openPanel('admin')" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Admin</button>
+      </nav>
+      <div class="userbar" id="userBar"></div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="kicker">HI I'AM NEV</div>
+        <h1>Clean Roblox audio converter.</h1>
+        <p>Convert, split, upload, and manage playable asset IDs in one clean dashboard.</p>
+        <div class="feature-chips">
+          <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>YouTube & SoundCloud</span>
+          <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/></svg>Auto split 6 min</span>
+          <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>One-click Roblox upload</span>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="hero-actions">
+          <button class="btn ghost" onclick="openAccounts()">Manage Accounts</button>
+          <button class="btn ghost" onclick="openPanel('history')">View History</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="converterPanel" class="panel active">
+      <div class="grid">
+        <div class="stack">
+          <section class="card">
+            <div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div><div class="card-title">Upload Audio</div><div class="card-desc">Paste Link supports YouTube and SoundCloud.</div></div></div><span class="pill">OGG Output</span></div>
+            <div class="card-body">
+              <form id="convertForm">
+                <div class="form-row"><label>Song Title</label><input class="input" id="titleInput" name="title" placeholder="Example: Cyber Sunset" required></div>
+                <div class="tabs"><button type="button" class="tab active" id="uploadModeBtn" onclick="setMode('upload')">Upload File</button><button type="button" class="tab" id="linkModeBtn" onclick="setMode('link')">Paste Link</button></div>
+                <div id="uploadBox"><label class="drop" id="dropzone"><input id="audioInput" type="file" name="audio" accept=".mp3,.wav,.ogg,.flac,.m4a,.aac"><div><div class="plus">+</div><strong>Drop audio here</strong><span>or click to choose a file</span><div class="file-name" id="fileName">No file selected</div></div></label></div>
+                <div id="linkBox" style="display:none"><div class="form-row"><label>YouTube / SoundCloud URL</label><input class="input" type="url" id="urlInput" placeholder="Paste link here..."><div class="hint" style="margin-top:10px">Restricted YouTube videos may require cookies or browser authentication. If YouTube blocks the request, upload the audio file directly.</div></div></div>
+                <div class="card" style="box-shadow:none;margin-top:16px"><div class="card-body">
+                  <div class="item-title">Speed-up</div><div class="item-meta">Set Roblox PlaybackSpeed to the recommended value to bring playback closer to the original speed and pitch.</div>
+                  <input type="hidden" name="speed" id="speedInput" value="2.326"><div class="preset" style="margin-top:12px"><button type="button" class="active" data-speed="2.326">2.326x</button><button type="button" data-speed="2.3">2.3x</button><button type="button" data-speed="4">4x</button><button type="button" data-speed="6">6x</button><button type="button" data-speed="8.57">8.57x</button></div>
+                  <div class="formula">Selected speed-up: <b id="speedText">2.326x</b><br>Recommended Roblox PlaybackSpeed: <b id="playbackText">0.43</b><br>Formula: Roblox PlaybackSpeed = 1 / speed-up</div>
+                </div></div>
+                <div class="card" style="box-shadow:none;margin-top:16px"><div class="card-body"><div class="item-title">Volume</div><div class="item-meta">Default output gain is -4dB.</div><input type="range" id="volumeSlider" name="amplify" min="-20" max="6" step="1" value="-4"><div class="formula">Output gain: <b id="volumeText">-4dB</b></div></div></div>
+                <button class="btn primary full" id="convertBtn" style="margin-top:16px" type="submit">Convert Audio</button>
+                <div class="result" id="result"></div>
+              </form>
+            </div>
+          </section>
+        </div>
+
+        <aside class="right-mini">
+
+          <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="card-title">Daily Limit</div><div class="card-desc"></div></div></div><span class="pill" id="limitDate">Today</span></div><div class="card-body"><div class="limit-grid"><div class="limit-box"><div class="limit-label">Convert</div><div class="limit-value" id="convertLimitText">0/10</div><div class="limit-bar"><div class="limit-fill" id="convertLimitFill"></div></div></div><div class="limit-box"><div class="limit-label">Upload</div><div class="limit-value" id="uploadLimitText">0/10</div><div class="limit-bar"><div class="limit-fill" id="uploadLimitFill"></div></div></div></div><div class="small"></div></div></section>
+          <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div><div><div class="card-title">Process Log</div><div class="card-desc">Stops when conversion/upload request is done</div></div></div><span class="pill">Live</span></div><div class="card-body"><div class="state idle" id="processState"><div class="spinner"></div><div><div class="state-title" id="processTitle">Idle</div><div class="state-sub" id="processSubtitle">No active process.</div></div></div><div class="log" id="logBox"><div class="empty">No active process.</div></div></div></section>
+          <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><div class="card-title">Roblox Upload</div><div class="card-desc">Upload only the active converted song</div></div></div><span class="pill">Open Cloud</span></div><div class="card-body">
+            <div class="form-row"><label>Converted Song</label><select class="select" id="songSelect"><option value="">No active converted song</option></select><div class="small">Only the latest active/opened conversion appears here. Open an old job from History if needed.</div></div>
+            <div class="form-row"><label>Roblox Account</label><select class="select" id="accountSelect"></select></div>
+            <div class="form-row"><label>Target</label><select class="select" id="uploadTarget"><option value="user">User</option><option value="group">Group</option></select></div>
+            <div class="form-row"><label>Asset Name</label><input class="input" id="assetNameInput" placeholder="Auto from song title"></div>
+            <div class="form-row"><label>Description</label><textarea class="textarea" id="assetDescription">Exclusive tracks powered by XOCIETY.</textarea></div>
+            <div class="footer-row" style="margin-bottom:10px"><button class="btn ghost" onclick="openAccounts()">Manage Accounts</button></div>
+            <button class="btn primary full" id="uploadRobloxBtn" onclick="uploadToRoblox()" disabled>Upload to Roblox</button>
+          </div></section>
+        </aside>
+      </div>
+    </section>
+
+    <section id="outputPanel" class="panel">
+      <section class="card"><div class="card-head"><div><div class="kicker" style="margin:0 0 8px">Output</div><div class="card-title" style="font-size:28px">Playable Asset IDs</div><div class="card-desc">Checking is white, failed is red, playable is green.</div></div><div class="footer-row"><button class="btn ghost" onclick="loadSavedNotes()">Refresh</button><button class="btn ghost" onclick="exportOutputTxt()">Export .txt</button></div></div><div class="card-body"><div id="currentOutputBox" class="list" style="margin-bottom:14px"></div><div id="savedOutputBox" class="list"><div class="empty">No saved playable IDs.</div></div></div></section>
+    </section>
+
+    <section id="historyPanel" class="panel">
+      <section class="card"><div class="card-head"><div><div class="kicker" style="margin:0 0 8px">Recent Conversions</div><div class="card-title" style="font-size:28px">Job History</div></div><button class="btn ghost" onclick="loadHistory()">Refresh</button></div><div class="card-body"><div style="overflow:auto"><table class="table"><thead><tr><th>File</th><th>Status</th><th>Roblox</th><th>Format</th><th>Created</th><th>Result</th></tr></thead><tbody id="historyRows"><tr><td colspan="6"><div class="empty">Loading history...</div></td></tr></tbody></table></div></div></section>
+    </section>
+
+
+    <section id="adminPanel" class="panel">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <div class="kicker" style="margin:0 0 8px">Admin</div>
+            <div class="card-title" style="font-size:28px">User Management</div>
+            <div class="card-desc">View Discord users, online status, and usage limits.</div>
+          </div>
+          <button class="btn ghost" onclick="loadAdminUsers()">Refresh</button>
+        </div>
+        <div class="card-body">
+          <div id="adminUsersBox" class="admin-grid"><div class="empty">Admin only.</div></div>
+        </div>
+      </section>
+    </section>
+
+    <div class="footer">Built for pemalas. Powered by Nev.</div>
+  </div>
+
+  <div class="modal-bg" id="accountsModal"><div class="modal"><div class="modal-head"><h3>Manage Roblox Accounts</h3><button class="btn ghost" onclick="closeAccounts()">Close</button></div><div class="modal-body">
+    <form id="accountForm"><input type="hidden" id="accountId"><div class="account-grid"><div class="form-row"><label>Account Name</label><input class="input" id="accountName" placeholder="Main Account" required></div><div class="form-row"><label>Assets API Key</label><input class="input" type="password" id="accountApiKey" placeholder="Paste key / leave blank when editing"></div><div class="form-row"><label>User ID</label><input class="input" id="accountUserId" placeholder="Roblox user ID"></div><div class="form-row"><label>Group ID Optional</label><input class="input" id="accountGroupId" placeholder="Roblox group ID"></div></div><div class="form-row"><label>Default Description</label><textarea class="textarea" id="accountDescription">Exclusive tracks powered by XOCIETY.</textarea></div><div class="footer-row"><button class="btn primary" type="submit">Save Account</button><button class="btn ghost" type="button" onclick="resetAccountForm()">New Account</button></div><div class="hint" style="margin-top:12px">For safety, use an alternate account.</div></form>
+    <div style="height:16px"></div><div class="list" id="accountsList"><div class="empty">No accounts.</div></div>
+  </div></div></div>
+
+<script>
+let mode='upload',activeJobId=null,jobPoller=null,activeJobData=null,historyData=[],accounts=[],savedNotes=[],currentUser=null;
+const $=id=>document.getElementById(id);
+function openPanel(panel){document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.panel===panel));['converter','output','history','admin'].forEach(p=>{const el=$(p+'Panel'); if(el) el.classList.toggle('active',p===panel)});if(panel==='history')loadHistory();if(panel==='output'){loadSavedNotes();renderCurrentOutput();}if(panel==='admin')loadAdminUsers();}
+function setMode(m){mode=m;$('uploadBox').style.display=m==='upload'?'block':'none';$('linkBox').style.display=m==='link'?'block':'none';$('uploadModeBtn').classList.toggle('active',m==='upload');$('linkModeBtn').classList.toggle('active',m==='link')}
+document.querySelectorAll('.preset button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.preset button').forEach(x=>x.classList.remove('active'));b.classList.add('active');const s=Number(b.dataset.speed);$('speedInput').value=s;$('speedText').innerText=s+'x';$('playbackText').innerText=(1/s).toFixed(2)});
+$('volumeSlider').oninput=e=>{$('volumeText').innerText=(Number(e.target.value)>0?'+':'')+e.target.value+'dB'};
+$('audioInput').onchange=()=>{if($('audioInput').files.length)$('fileName').innerText=$('audioInput').files[0].name};['dragenter','dragover'].forEach(e=>$('dropzone').addEventListener(e,x=>{x.preventDefault();$('dropzone').classList.add('drag')}));['dragleave','drop'].forEach(e=>$('dropzone').addEventListener(e,x=>{x.preventDefault();$('dropzone').classList.remove('drag')}));$('dropzone').addEventListener('drop',e=>{if(e.dataTransfer.files.length){$('audioInput').files=e.dataTransfer.files;$('fileName').innerText=e.dataTransfer.files[0].name}});
+$('convertForm').onsubmit=async e=>{e.preventDefault();$('convertBtn').disabled=true;$('convertBtn').innerText='Processing...';setProcess('Converting','Preparing audio job...','active');renderedLogCount=0;$('logBox').innerHTML='<div class="log-line"><span class="log-time">'+new Date().toLocaleTimeString()+'</span>Initializing job...</div>';try{let res;if(mode==='upload'){res=await fetch('/api/jobs/upload',{method:'POST',body:new FormData($('convertForm'))})}else{res=await fetch('/api/jobs/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$('titleInput').value,url:$('urlInput').value,speed:$('speedInput').value,amplify:$('volumeSlider').value})})}const data=await res.json();if(!res.ok)throw new Error(data.error||'Failed to start job.');activeJobId=data.jobId;refreshMe();startPollingJob(activeJobId)}catch(err){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';setProcess('Failed',err.message,'error');renderedLogCount=0;$('logBox').innerHTML='<div class="log-line">'+escapeHtml(err.message)+'</div>'}};
+function startPollingJob(id){if(jobPoller)clearInterval(jobPoller);renderedLogCount=0;pollJob(id);jobPoller=setInterval(()=>pollJob(id),1500)}
+async function pollJob(id){const res=await fetch('/api/jobs/'+id);const job=await res.json();if(!res.ok)return;activeJobData=job;renderLogs(job.logs||[]);renderResult(job);renderCurrentOutput();updateProcess(job);await loadHistory(false);updateSongSelect();if(job.status==='done'&&!job.filesExpired)$('uploadRobloxBtn').disabled=false;if((job.status==='done'||job.status==='failed')&&job.robloxStatus!=='processing'){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';$('uploadRobloxBtn').innerText='Upload to Roblox';clearInterval(jobPoller);jobPoller=null;loadSavedNotes()}}
+function setProcess(t,s,state){$('processTitle').innerText=t;$('processSubtitle').innerText=s;if(state){const el=$('processState');el.classList.remove('idle','active','done','error');el.classList.add(state)}}function updateProcess(j){if(j.status==='processing')return setProcess('Converting','Audio conversion is running...','active');if(j.status==='failed')return setProcess('Failed','Check the process log.','error');if(j.robloxStatus==='processing')return setProcess('Uploading','Sending audio to Roblox...','active');if(j.robloxStatus==='checking'){const n=j.songNotes||[],a=n.filter(x=>x.status==='available').length,c=n.filter(x=>x.status==='checking').length,f=n.filter(x=>x.status==='failed').length;return setProcess('Upload finished',`Playable check continues in Output: ${a} playable · ${c} checking · ${f} failed`,c>0?'active':'done')}if(j.status==='done')return setProcess('Ready','Conversion complete. Ready to upload.','done')}
+let renderedLogCount=0;
+function resetLog(){renderedLogCount=0;$('logBox').innerHTML='<div class="empty">No active process.</div>'}
+function renderLogs(logs){
+  const box=$('logBox');
+  if(!logs||!logs.length){if(renderedLogCount!==0){box.innerHTML='<div class="empty">No logs.</div>';renderedLogCount=0}return}
+  // new job started or log was cleared server-side: reset and start fresh
+  if(logs.length<renderedLogCount){box.innerHTML='';renderedLogCount=0}
+  // first batch: clear placeholder
+  if(renderedLogCount===0)box.innerHTML='';
+  // only append the lines we haven't rendered yet so the slide-in animation plays once per line
+  const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<40;
+  const frag=document.createDocumentFragment();
+  for(let i=renderedLogCount;i<logs.length;i++){
+    const l=logs[i];
+    const line=document.createElement('div');
+    line.className='log-line';
+    line.innerHTML=`<span class="log-time">${new Date(l.time).toLocaleTimeString()}</span>${escapeHtml(l.message)}`;
+    frag.appendChild(line);
+  }
+  box.appendChild(frag);
+  renderedLogCount=logs.length;
+  if(atBottom)box.scrollTop=box.scrollHeight;
+}
+function renderResult(j){if(j.status==='failed'){$('result').style.display='block';$('result').style.borderColor='rgba(239,68,68,.3)';$('result').style.background='rgba(239,68,68,.08)';$('result').style.color='#fecaca';$('result').innerHTML='<b>Conversion failed.</b><br>'+escapeHtml(j.error||'');return}if(j.status!=='done')return;const links=(j.outputs||[]).map(o=>`<a class="download" href="${o.downloadUrl}" download>${escapeHtml(o.displayName)}</a>`).join('');$('result').style.display='block';$('result').innerHTML=`<b>Conversion completed.</b><br>${escapeHtml(j.title)} · ${j.originalDurationText} → ${j.processedDurationText}<br>Recommended PlaybackSpeed: ${j.playbackSpeed}<br>${links||'Files expired.'}`}
+async function uploadToRoblox(){const jobId=$('songSelect').value||activeJobId;if(!jobId)return alert('Convert a song first, or open one from History.');const acc=$('accountSelect').value;if(!acc)return alert('Add/select a Roblox account first.');activeJobId=jobId;$('uploadRobloxBtn').disabled=true;$('uploadRobloxBtn').innerText='Uploading...';setProcess('Uploading','Sending audio to Roblox...','active');const res=await fetch(`/api/jobs/${jobId}/upload-roblox`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:acc,assetName:$('assetNameInput').value||getSelectedJobTitle(),description:$('assetDescription').value,target:$('uploadTarget').value})});const data=await res.json();if(!res.ok){alert(data.error||'Upload failed.');$('uploadRobloxBtn').disabled=false;$('uploadRobloxBtn').innerText='Upload to Roblox';return}refreshMe();startPollingJob(jobId)}
+function renderCurrentOutput(){const notes=(activeJobData&&activeJobData.songNotes)||[];$('currentOutputBox').innerHTML=notes.length?notes.map(renderNote).join(''):''}
+function renderNote(n){const st=n.status||'checking';return `<div class="item"><div class="item-top"><div><div class="item-title">Part ${escapeHtml(n.part)} - ${escapeHtml(n.name||'Audio')}</div><div class="item-meta">${st==='available'?`Asset ID: <b>${escapeHtml(n.assetId)}</b>`:escapeHtml(n.reason||'Waiting for Roblox moderation / availability.')}</div></div><span class="status ${st}">${escapeHtml(st)}</span></div><div class="actions">${st==='available'&&n.assetId?`<button class="mini" onclick="copyText('${escAttr(n.assetId)}')">Copy ID</button>`:''}${st!=='available'?`<button class="mini" onclick="markPlayable('${escAttr(activeJobData.id)}','${escAttr(n.part)}','${escAttr(n.pendingAssetId||'')}')">Mark Playable</button>`:''}<button class="mini" onclick="recheckJob('${escAttr(activeJobData.id)}')">Recheck</button>${st!=='failed'?`<button class="mini" onclick="markFailed('${escAttr(activeJobData.id)}','${escAttr(n.part)}')">Mark Failed</button>`:''}</div></div>`}
+async function markPlayable(jobId,part,pending){let id=pending;if(!id)id=prompt('Enter Roblox Asset ID:');if(!id)return;const r=await fetch(`/api/notes/${jobId}/${part}/mark-playable`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assetId:id})});const j=await r.json();if(!r.ok)return alert(j.error||'Failed.');activeJobData=j;renderCurrentOutput();loadSavedNotes()}
+async function markFailed(jobId,part){if(!confirm('Mark this part as failed?'))return;const r=await fetch(`/api/notes/${jobId}/${part}/mark-failed`,{method:'POST'});const j=await r.json();if(!r.ok)return alert(j.error||'Failed.');activeJobData=j;renderCurrentOutput()}
+async function recheckJob(id){const r=await fetch(`/api/jobs/${id}/recheck-roblox`,{method:'POST'});const j=await r.json();if(!r.ok)return alert(j.error||'Recheck failed.');activeJobData=j;renderCurrentOutput();loadSavedNotes()}
+async function loadHistory(render=true){const r=await fetch('/api/history');historyData=await r.json();updateSongSelect();if(render)renderHistoryRows()}
+function updateSongSelect(){
+  const active = activeJobData && activeJobData.status==='done' && !activeJobData.filesExpired && activeJobData.outputs && activeJobData.outputs.length ? activeJobData : null;
+  if(active){
+    $('songSelect').innerHTML = `<option value="${escAttr(active.id)}">${escapeHtml(active.title||'Untitled')}</option>`;
+    $('songSelect').value = active.id;
+    if(!$('assetNameInput').value || $('assetNameInput').dataset.auto==='1'){
+      $('assetNameInput').value = active.title || '';
+      $('assetNameInput').dataset.auto = '1';
+    }
+  }else{
+    $('songSelect').innerHTML = '<option value="">No active converted song</option>';
+  }
+}
+function getSelectedJobTitle(){return activeJobData?.title||'Roblox Audio'}
+function renderHistoryRows(){if(!historyData.length){$('historyRows').innerHTML='<tr><td colspan="6"><div class="empty">No history.</div></td></tr>';return}$('historyRows').innerHTML=historyData.map(j=>`<tr><td><b>${escapeHtml(j.title||'Untitled')}</b><div class="item-meta">${escapeHtml((j.outputs&&j.outputs[0]?.displayName)||'No output')}</div></td><td><span class="status ${j.filesExpired?'expired':j.status}">${j.filesExpired?'expired':j.status}</span></td><td><span class="status ${j.robloxStatus||'not_started'}">${j.robloxStatus||'not requested'}</span></td><td>OGG</td><td>${new Date(j.createdAt).toLocaleString()}</td><td><button class="mini" onclick="openJob('${escAttr(j.id)}')">View Detail</button></td></tr>`).join('')}
+function openJob(id){activeJobId=id;$('assetNameInput').value='';$('assetNameInput').dataset.auto='1';openPanel('converter');startPollingJob(id)}
+async function loadSavedNotes(){const r=await fetch('/api/notes');savedNotes=await r.json();$('savedOutputBox').innerHTML=savedNotes.length?savedNotes.map(n=>`<div class="item"><div class="item-top"><div><div class="item-title">${escapeHtml(n.title||'Audio')} - Part ${escapeHtml(n.part||1)}</div><div class="item-meta">Asset ID: <b>${escapeHtml(n.assetId)}</b><br>PlaybackSpeed: ${escapeHtml(n.playbackSpeed||'-')} · Account: ${escapeHtml(n.accountName||'-')}</div></div><span class="status available">Playable</span></div><div class="actions"><button class="mini" onclick="copyText('${escAttr(n.assetId)}')">Copy ID</button><button class="mini" onclick="deleteNote('${escAttr(n.id)}')">Delete</button></div></div>`).join(''):'<div class="empty">No saved playable IDs.</div>'}
+async function deleteNote(id){if(!confirm('Delete this saved output?'))return;await fetch('/api/notes/'+encodeURIComponent(id),{method:'DELETE'});loadSavedNotes()}
+function exportOutputTxt(){const text=savedNotes.length?savedNotes.map(n=>`${n.title||'Audio'} - Part ${n.part||1} - ${n.assetId} - Playable`).join('\n'):'No saved playable IDs.';const b=new Blob([text],{type:'text/plain'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='nev-output.txt';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u)}
+function openAccounts(){resetAccountForm();$('accountsModal').classList.add('open');loadAccounts()}function closeAccounts(){$('accountsModal').classList.remove('open')}function resetAccountForm(){$('accountId').value='';$('accountName').value='';$('accountApiKey').value='';$('accountUserId').value='';$('accountGroupId').value='';$('accountDescription').value='Exclusive tracks powered by XOCIETY.'}
+$('accountForm').onsubmit=async e=>{e.preventDefault();const id=$('accountId').value;const payload={label:$('accountName').value,apiKey:$('accountApiKey').value,userId:$('accountUserId').value,groupId:$('accountGroupId').value,defaultDescription:$('accountDescription').value};const r=await fetch(id?'/api/accounts/'+id:'/api/accounts',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok)return alert(d.error||'Failed to save account.');resetAccountForm();loadAccounts()};
+async function loadAccounts(){const r=await fetch('/api/accounts');if(r.status===401)return;accounts=await r.json();$('accountSelect').innerHTML=accounts.length?accounts.map(a=>`<option value="${escAttr(a.id)}">${escapeHtml(a.label)}${a.isDefault?' — default':''}</option>`).join(''):'<option value="">No account</option>';const def=accounts.find(a=>a.isDefault)||accounts[0];if(def){$('accountSelect').value=def.id;$('assetDescription').value=def.defaultDescription||$('assetDescription').value}else{$('accountSelect').value=''}$('accountsList').innerHTML=accounts.length?accounts.map(a=>`<div class="item"><div class="item-top"><div><div class="item-title">${escapeHtml(a.label)} ${a.isDefault?'<span class="pill">Default</span>':''}</div><div class="item-meta">Key: ${escapeHtml(a.apiKeyMasked||'-')}<br>User: ${escapeHtml(a.userId||'-')} · Group: ${escapeHtml(a.groupId||'-')}</div></div><span class="status ${a.apiKeyMasked?'available':'pending'}">${a.apiKeyMasked?'ready':'no key'}</span></div><div class="actions"><button class="mini" onclick="editAccount('${escAttr(a.id)}')">Edit</button><button class="mini" onclick="setDefaultAccount('${escAttr(a.id)}')">Set Default</button><button class="mini" onclick="deleteAccount('${escAttr(a.id)}')">Delete</button></div></div>`).join(''):'<div class="empty">No accounts. Add one above.</div>'}
+function editAccount(id){const a=accounts.find(x=>x.id===id);if(!a)return;$('accountId').value=a.id;$('accountName').value=a.label;$('accountApiKey').value='';$('accountUserId').value=a.userId||'';$('accountGroupId').value=a.groupId||'';$('accountDescription').value=a.defaultDescription||'Exclusive tracks powered by XOCIETY.'}
+async function setDefaultAccount(id){await fetch('/api/accounts/'+id+'/default',{method:'POST'});loadAccounts()}async function deleteAccount(id){if(!confirm('Delete this account?'))return;await fetch('/api/accounts/'+id,{method:'DELETE'});loadAccounts()}
+
+
+function renderUsageLimit(){
+  const u=currentUser?.usageToday||{};
+  const convUsed=Number(u.convert||0), uplUsed=Number(u.upload||0);
+  const convLimit=Number(u.dailyConvertLimit ?? currentUser?.dailyConvertLimit ?? 10);
+  const uplLimit=Number(u.dailyUploadLimit ?? currentUser?.dailyUploadLimit ?? 10);
+  if(!$('convertLimitText')||!$('uploadLimitText')) return;
+  $('convertLimitText').innerText=convLimit<0?`${convUsed}/∞`:`${convUsed}/${convLimit}`;
+  $('uploadLimitText').innerText=uplLimit<0?`${uplUsed}/∞`:`${uplUsed}/${uplLimit}`;
+  $('convertLimitFill').style.width=convLimit<=0?'0%':Math.min(100,(convUsed/convLimit)*100)+'%';
+  $('uploadLimitFill').style.width=uplLimit<=0?'0%':Math.min(100,(uplUsed/uplLimit)*100)+'%';
+  if($('limitDate')) $('limitDate').innerText=u.date||'Today';
+}
+async function refreshMe(){
+  const r=await fetch('/api/me');
+  const data=await r.json();
+  if(data.authenticated){ currentUser=data.user; renderUserBar(); renderUsageLimit(); }
+}
+function discordAvatar(user){if(!user||!user.avatar)return '';const ext=String(user.avatar).startsWith('a_')?'gif':'png';return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=64`}
+function renderUserBar(){const name=currentUser?.globalName||currentUser?.username||'User';const avatar=discordAvatar(currentUser);$('userBar').innerHTML=`<div class="profile">${avatar?`<img class="avatar" src="${avatar}" alt="">`:`<div class="avatar">${escapeHtml(name[0]||'U')}</div>`}<div><div class="profile-name">${escapeHtml(name)}</div><div class="profile-sub">${currentUser?.isAdmin?'Admin':'Discord user'}</div></div></div><button class="btn ghost" onclick="logout()">Logout</button>`}
+async function logout(){await fetch('/api/logout',{method:'POST'});location.href='/'}
+async function initAuth(){const r=await fetch('/api/me');const data=await r.json();if(!data.authenticated){$('loginView').style.display='flex';$('appRoot').style.display='none';return;}currentUser=data.user;$('loginView').style.display='none';$('appRoot').style.display='block';renderUserBar();renderUsageLimit();if(currentUser.isAdmin)$('adminNavBtn').style.display='block';loadAccounts();loadHistory();loadSavedNotes();}
+async function loadAdminUsers(){if(!currentUser?.isAdmin)return;const r=await fetch('/api/admin/users');const users=await r.json();if(!r.ok){$('adminUsersBox').innerHTML='<div class="empty">Unable to load admin users.</div>';return;}$('adminUsersBox').innerHTML=users.length?users.map(u=>`<div class="admin-row"><div><b>${escapeHtml(u.globalName||u.username)}</b><div class="item-meta">${u.id}<br>${u.isOnline?'<span class="online-dot"></span>Online':'<span class="offline-dot"></span>Offline'} · Last login: ${u.lastLoginAt?new Date(u.lastLoginAt).toLocaleString():'-'}</div></div><div><span class="status ${u.isBlocked?'failed':'available'}">${u.isBlocked?'blocked':'active'}</span></div><div class="item-meta">C: ${u.usageToday?.convert||0}</div><div class="item-meta">U: ${u.usageToday?.upload||0}</div><input class="input" id="conv_${u.id}" type="number" value="${u.dailyConvertLimit||0}" min="0"><input class="input" id="upl_${u.id}" type="number" value="${u.dailyUploadLimit||0}" min="0"><div class="actions" style="grid-column:1/-1"><button class="mini" onclick="saveAdminUser('${escAttr(u.id)}',${u.isBlocked?'false':'undefined'})">Save Limits</button><button class="mini" onclick="saveAdminUser('${escAttr(u.id)}',${u.isBlocked?'false':'true'})">${u.isBlocked?'Unblock':'Block'}</button></div></div>`).join(''):'<div class="empty">No users yet.</div>'}
+async function saveAdminUser(id,blocked){const body={dailyConvertLimit:Number($('conv_'+id).value),dailyUploadLimit:Number($('upl_'+id).value)};if(blocked!==undefined)body.isBlocked=blocked==='true'||blocked===true;const r=await fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||'Failed to update user.')}loadAdminUsers()}
+function copyText(t){navigator.clipboard.writeText(t);alert('Copied: '+t)}function escapeHtml(t){const d=document.createElement('div');d.innerText=t??'';return d.innerHTML}function escAttr(t){return String(t??'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')}
+$('assetNameInput').addEventListener('input',()=>{$('assetNameInput').dataset.auto='0'});initAuth();
+</script>
+</body>
+</html>
