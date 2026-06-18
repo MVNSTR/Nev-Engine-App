@@ -1,17 +1,25 @@
-const { app, BrowserWindow, shell, Menu } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
 const { fork } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 // Fixed port so the Discord OAuth redirect URL stays stable.
 // Register http://localhost:47821/auth/discord/callback in the Discord portal.
 const PORT = Number(process.env.PORT) || 47821;
 const APP_URL = `http://localhost:${PORT}`;
 
+// Release feed (where the installer + latest.yml are published).
+const GH_OWNER = 'MVNSTR';
+const GH_REPO = 'Nev-Engine-App';
+const RELEASES_URL = `https://github.com/${GH_OWNER}/${GH_REPO}/releases/latest`;
+
 let serverProcess = null;
 let mainWindow = null;
+let splashWindow = null;
+let appLaunched = false;
 
 // Generate (once) and persist a per-install secret in the user's local data
 // folder. This keeps encrypted API keys / sessions readable across restarts
@@ -56,7 +64,6 @@ function startServer() {
     DEFAULT_DAILY_UPLOAD_LIMIT: '-1',
     SESSION_SECRET: secrets.SESSION_SECRET,
     APP_SECRET: secrets.APP_SECRET,
-    ALLOW_APP_CONFIG: '1',
     ELECTRON_RUN_AS_NODE: '1'
   };
   serverProcess = fork(serverEntry(), [], { env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
@@ -73,12 +80,36 @@ function waitForServer(done, tries = 0) {
   });
 }
 
+function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 460,
+    height: 580,
+    frame: false,
+    resizable: false,
+    show: true,
+    center: true,
+    backgroundColor: '#070b09',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+  splashWindow.on('closed', () => { splashWindow = null; });
+}
+
+function splashStatus(data) {
+  if (splashWindow && !splashWindow.isDestroyed()) splashWindow.webContents.send('updater-status', data);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 980,
     minHeight: 640,
+    show: false,
     backgroundColor: '#070b09',
     autoHideMenuBar: true,
     title: 'NEV Audio Engine',
@@ -87,6 +118,10 @@ function createWindow() {
   });
   Menu.setApplicationMenu(null);
   mainWindow.loadURL(APP_URL);
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  });
   // Open external links (e.g. download pages) in the system browser.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(APP_URL)) { shell.openExternal(url); return { action: 'deny' }; }
@@ -95,21 +130,78 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
+// Launch the real app (only when up to date or explicitly allowed).
+function proceedToApp() {
+  if (appLaunched) return;
+  appLaunched = true;
+  splashStatus({ type: 'starting' });
+  waitForServer(err => {
+    if (err) console.error(err);
+    createWindow();
+  });
+}
+
+function runUpdateCheck() {
+  // Updates only work from a packaged build.
+  if (!app.isPackaged) { proceedToApp(); return; }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.allowDowngrade = false;
+  // Optional token (only if baked at build time) for private release feeds.
+  if (process.env.GH_UPDATE_TOKEN) {
+    try { autoUpdater.requestHeaders = { Authorization: `token ${process.env.GH_UPDATE_TOKEN}` }; } catch {}
+  }
+
+  const current = app.getVersion();
+
+  autoUpdater.on('checking-for-update', () => splashStatus({ type: 'checking' }));
+  autoUpdater.on('update-available', info => {
+    splashStatus({ type: 'available', version: current, latest: info.version });
+  });
+  autoUpdater.on('download-progress', p => {
+    splashStatus({ type: 'progress', percent: p.percent || 0 });
+  });
+  autoUpdater.on('update-downloaded', () => {
+    splashStatus({ type: 'downloaded' });
+    setTimeout(() => { try { autoUpdater.quitAndInstall(false, true); } catch (e) { splashStatus({ type: 'error', message: String(e), allowContinue: true }); } }, 900);
+  });
+  autoUpdater.on('update-not-available', () => proceedToApp());
+  autoUpdater.on('error', err => {
+    splashStatus({ type: 'error', message: (err && err.message) ? err.message : String(err), allowContinue: true });
+  });
+
+  autoUpdater.checkForUpdates().catch(err => {
+    splashStatus({ type: 'error', message: (err && err.message) ? err.message : String(err), allowContinue: true });
+  });
+}
+
+ipcMain.on('updater-install', () => {
+  try { autoUpdater.quitAndInstall(false, true); }
+  catch (e) { splashStatus({ type: 'error', message: String(e), allowContinue: true }); }
+});
+ipcMain.on('updater-open-releases', () => shell.openExternal(RELEASES_URL));
+ipcMain.on('updater-continue', () => proceedToApp());
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+    const win = mainWindow || splashWindow;
+    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
   });
 
   app.whenReady().then(() => {
-    startServer();
-    waitForServer(err => {
-      if (err) console.error(err);
-      createWindow();
+    process.env.NEV_APP_VERSION = app.getVersion();
+    startServer();      // boot the local server in the background
+    createSplash();     // show loading/version screen
+    runUpdateCheck();    // check version, then proceed or update
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        if (appLaunched) createWindow(); else createSplash();
+      }
     });
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
 }
 

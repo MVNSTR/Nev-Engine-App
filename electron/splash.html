@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>NEV Audio Engine</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+    color:#eef5f1;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(800px 500px at 50% -10%,rgba(34,197,94,.18),transparent 60%),linear-gradient(160deg,#070b09,#0a0f12 55%,#070d0a);
+    overflow:hidden;user-select:none;-webkit-user-select:none
+  }
+  .wrap{text-align:center;width:100%;padding:30px 34px;animation:fade .5s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .logo{width:74px;height:74px;margin:0 auto 18px;border-radius:20px;display:grid;place-items:center;font-size:34px;
+    background:linear-gradient(135deg,#22c55e,#34d399);color:#04130b;box-shadow:0 14px 40px rgba(34,197,94,.45)}
+  h1{font-size:21px;font-weight:800;letter-spacing:-.02em}
+  .sub{color:#8b9d94;font-size:12px;margin-top:5px;letter-spacing:.04em}
+  .ver{color:#6b7d74;font-size:11px;margin-top:2px;font-variant-numeric:tabular-nums}
+  .status{margin-top:24px;font-size:13px;color:#cfe0d6;min-height:18px;line-height:1.5}
+  .bar{height:7px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:14px;opacity:0;transition:opacity .3s}
+  .bar.show{opacity:1}
+  .fill{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,#22c55e,#34d399);transition:width .25s ease;box-shadow:0 0 12px rgba(34,197,94,.5)}
+  .spin{width:26px;height:26px;margin:22px auto 0;border-radius:50%;border:3px solid rgba(255,255,255,.14);border-top-color:#34d399;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .actions{margin-top:20px;display:none;flex-direction:column;gap:9px}
+  .actions.show{display:flex}
+  .btn{height:40px;border-radius:11px;border:1px solid rgba(148,196,170,.24);background:rgba(255,255,255,.04);color:#eef5f1;font-size:12.5px;font-weight:700;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:rgba(34,197,94,.5);background:rgba(255,255,255,.07)}
+  .btn.primary{background:linear-gradient(135deg,#22c55e,#34d399);border-color:transparent;color:#04130b}
+  .warn{margin-top:14px;font-size:12px;color:#fcd34d;line-height:1.5;display:none}
+  .warn.show{display:block}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">🎧</div>
+    <h1>NEV Audio Engine</h1>
+    <div class="sub">Roblox Assets Manager</div>
+    <div class="ver" id="ver"></div>
+    <div class="spin" id="spin"></div>
+    <div class="status" id="status">Memulai…</div>
+    <div class="bar" id="bar"><div class="fill" id="fill"></div></div>
+    <div class="warn" id="warn"></div>
+    <div class="actions" id="actions">
+      <button class="btn primary" id="btnInstall">Update &amp; Restart Sekarang</button>
+      <button class="btn" id="btnDownload">Buka Halaman Download</button>
+      <button class="btn" id="btnContinue" style="display:none">Lanjut Tanpa Update</button>
+    </div>
+  </div>
+<script>
+  const $ = id => document.getElementById(id);
+  function setStatus(t){ $('status').textContent = t; }
+  function showSpinner(on){ $('spin').style.display = on ? 'block' : 'none'; }
+  function setProgress(p){ $('bar').classList.add('show'); $('fill').style.width = Math.max(0,Math.min(100,p)) + '%'; }
+  function showActions(opts){
+    $('actions').classList.add('show');
+    $('btnInstall').style.display = opts.install ? 'block' : 'none';
+    $('btnDownload').style.display = opts.download ? 'block' : 'none';
+    $('btnContinue').style.display = opts.continue ? 'block' : 'none';
+    showSpinner(false);
+  }
+  function showWarn(t){ $('warn').textContent = t; $('warn').classList.add('show'); }
+
+  if (window.updater) {
+    $('ver').textContent = 'v' + (window.updater.version || '');
+    window.updater.on(msg => {
+      if (msg.version && msg.latest) $('ver').textContent = 'v' + msg.version + '  →  v' + msg.latest;
+      switch (msg.type) {
+        case 'checking': setStatus('Mengecek versi terbaru…'); showSpinner(true); break;
+        case 'starting': setStatus('Menyalakan aplikasi…'); showSpinner(true); break;
+        case 'available': setStatus('Versi baru tersedia. Mengunduh update…'); setProgress(0); break;
+        case 'progress': setStatus('Mengunduh update… ' + Math.round(msg.percent) + '%'); setProgress(msg.percent); break;
+        case 'downloaded': setStatus('Update selesai. Memasang & restart…'); setProgress(100); break;
+        case 'blocked':
+          setStatus('Aplikasi ini sudah usang (v' + (msg.version||'') + '). Versi terbaru v' + (msg.latest||'') + '.');
+          showWarn('Update wajib dilakukan sebelum bisa memakai aplikasi.');
+          showActions({ install: !!msg.canInstall, download: true, continue: false });
+          break;
+        case 'error':
+          setStatus('Gagal mengecek/memasang update.');
+          showWarn(msg.message || 'Periksa koneksi internet.');
+          showActions({ install: false, download: true, continue: !!msg.allowContinue });
+          break;
+      }
+    });
+    $('btnInstall').onclick = () => { setStatus('Memasang…'); showActions({}); $('actions').classList.remove('show'); window.updater.install(); };
+    $('btnDownload').onclick = () => window.updater.openReleases();
+    $('btnContinue').onclick = () => window.updater.continueAnyway();
+  }
+</script>
+</body>
+</html>
