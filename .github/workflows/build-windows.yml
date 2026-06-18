@@ -46,8 +46,8 @@ jobs:
 
           Get-ChildItem bin
 
-      - name: Build installer
-        run: npm run dist:win
+      - name: Build and publish installer
+        run: npx electron-builder --win --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,12 +55,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NEV-Audio-Engine-Setup
-          path: dist-app/*.exe
-
-      - name: Publish to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist-app/*.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: |
+            dist-app/*.exe
+            dist-app/latest.yml

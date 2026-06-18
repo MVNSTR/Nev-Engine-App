@@ -1,6 +1,6 @@
 {
   "name": "nev-discord-audio-engine",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "NEV Audio Engine - Roblox audio converter & uploader",
   "author": "NEV",
   "main": "electron/main.js",
@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node server.js",
     "app": "electron .",
-    "dist:win": "electron-builder --win --x64 -p never",
+    "dist:win": "electron-builder --win --x64",
     "dist:linux": "electron-builder --linux",
     "build:win": "pkg . --targets node22-win-x64 --output dist/NEV-Audio-Engine.exe && node scripts/assemble.js win"
   },
@@ -31,7 +31,8 @@
       {
         "provider": "github",
         "owner": "MVNSTR",
-        "repo": "Nev-Engine-App"
+        "repo": "Nev-Engine-App",
+        "releaseType": "release"
       }
     ],
     "files": [
