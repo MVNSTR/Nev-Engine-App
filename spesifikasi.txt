@@ -1,0 +1,93 @@
+NEV AUDIO ENGINE — SPESIFIKASI APLIKASI
+========================================
+Update terakhir: 2026-06-18
+
+1. RINGKASAN
+------------
+Aplikasi desktop (Electron) untuk convert audio dan upload ke Roblox sebagai
+playable asset. Dibungkus sebagai installer Windows (NSIS) dengan auto-update.
+Bisa juga dijalankan sebagai web server (mode dev / hosting).
+
+2. ARSITEKTUR (TARGET)
+----------------------
+Model hybrid: AUTH terpusat, DATA konten lokal.
+
+  a) SERVER PUSAT (authority)  -> contoh: https://nevaudios.1happy.my.id
+     - Memegang Discord Client ID & Secret (user TIDAK mengisi ini).
+     - Menyimpan: daftar user Discord, status admin, limit per-user, sesi.
+     - Melakukan Discord OAuth, lalu mengembalikan token ke aplikasi desktop
+       lewat redirect loopback ke http://127.0.0.1:<port>/auth/desktop-callback.
+     - Endpoint untuk desktop: /api/me, /api/admin/users, /api/usage/bump
+       (semua menerima Authorization: Bearer <token>).
+     - Mode aktif bila ENV CENTRAL_AUTH_URL TIDAK di-set.
+
+  b) APLIKASI DESKTOP (client)
+     - ENV CENTRAL_AUTH_URL di-set ke URL server pusat.
+     - Auth/identitas/limit/admin di-proxy ke server pusat memakai token.
+     - Token login disimpan LOKAL: %APPDATA%/NEV Audio Engine/data/auth.json
+     - DATA KONTEN disimpan LOKAL & rahasia:
+         history.json, notes.json, accounts.json (API key TERENKRIPSI),
+         usage.json, youtube-cookies.txt
+     - Kunci enkripsi unik per-install: secret.json (acak saat pertama jalan).
+
+3. ALUR LOGIN (DISCORD via BROWSER DEFAULT)
+-------------------------------------------
+  1. User klik "Login dengan Discord" di aplikasi.
+  2. Aplikasi membuka BROWSER DEFAULT ke:
+       <CENTRAL_AUTH_URL>/auth/discord?desktop=<localPort>&state=<nonce>
+  3. Server pusat menjalankan OAuth Discord (pakai client id/secret miliknya).
+  4. Setelah sukses, server pusat redirect browser ke:
+       http://127.0.0.1:<localPort>/auth/desktop-callback?token=<t>&state=<nonce>
+  5. Halaman menampilkan: "Login berhasil! Kamu bisa menutup tab ini."
+  6. Aplikasi desktop menerima token, menyimpan lokal, lalu otomatis masuk.
+
+4. ADMIN & LIMIT
+----------------
+  - Admin ditentukan oleh ADMIN_DISCORD_IDS di server pusat.
+  - Tab "Admin" hanya muncul bila Discord ID user termasuk admin.
+  - Admin dapat menaikkan limit user lain via tab Admin.
+  - Default limit user biasa: convert 10/hari, upload 10/hari.
+  - Admin: unlimited (tak terbatas).
+
+5. AUTO-UPDATE (WAJIB)
+----------------------
+  - Saat dibuka, splash mengecek versi ke GitHub Releases (latest.yml).
+  - Jika versi app < versi terbaru: otomatis download + install + restart;
+    aplikasi lama TIDAK bisa dipakai sampai update selesai.
+  - Jika sudah terbaru: langsung masuk aplikasi.
+  - Jika offline/gagal cek: tersedia tombol "Lanjut Tanpa Update".
+  - Repo Releases harus PUBLIC agar auto-update jalan tanpa token.
+
+6. TOOLS EKSTERNAL (di-bundle dalam installer, folder bin/)
+-----------------------------------------------------------
+  ffmpeg.exe, ffprobe.exe  -> konversi & analisa audio
+  yt-dlp.exe               -> download dari YouTube/SoundCloud
+  deno.exe                 -> runtime JS untuk sebagian link YouTube
+
+7. PRIVASI / KERAHASIAAN
+------------------------
+  - Semua data konten (akun Roblox, API key, cookies, history) hanya di mesin user.
+  - API key disimpan terenkripsi (AES-256-GCM), kunci unik per-install.
+  - Server pusat hanya menyimpan identitas Discord + limit + sesi, BUKAN API key.
+
+8. RILIS / VERSIONING
+---------------------
+  1. Naikkan "version" di package.json (mis. 2.4.0).
+  2. git tag v2.4.0 && git push origin v2.4.0
+  3. GitHub Actions build + publish installer & latest.yml ke Releases.
+  4. Semua user mendapat himbauan update otomatis saat membuka app.
+
+9. KONFIGURASI ENV (SERVER PUSAT)
+---------------------------------
+  DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_CALLBACK_URL
+  SESSION_SECRET, APP_SECRET
+  ADMIN_DISCORD_IDS (pisahkan dengan koma)
+  DEFAULT_DAILY_CONVERT_LIMIT (default 10)
+  DEFAULT_DAILY_UPLOAD_LIMIT (default 10)
+  BASE_URL
+
+10. KONFIGURASI ENV (DESKTOP — di-set oleh Electron)
+----------------------------------------------------
+  CENTRAL_AUTH_URL   -> URL server pusat (otoritas auth)
+  NEV_DATA_DIR       -> folder data lokal (AppData user)
+  PORT               -> port loopback lokal (default 47821)

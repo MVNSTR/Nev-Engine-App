@@ -556,11 +556,32 @@ async function initLoginConfig(){
   // Login button only works when configured; otherwise nudge to setup.
   $('loginBtn').style.display=configured?'inline-flex':'none';
   $('loginNotConfigured').style.display=configured?'none':'block';
+  // Desktop app: login goes through the default browser, then auto-logs in.
+  if(appConfig.desktop){ const lb=$('loginBtn'); lb.removeAttribute('href'); lb.style.cursor='pointer'; lb.onclick=(e)=>{ e.preventDefault(); startDesktopLogin(); }; }
   // Show the setup toggle only on the desktop app (editable), where creds can be set.
   $('openSetupBtn').style.display=(appConfig.editable && configured)?'block':'none';
   if(appConfig.editable && !configured) showSetup(true); else showSetup(false);
 }
 function showSetup(on){ $('loginMain').style.display=on?'none':'block'; $('loginSetup').style.display=on?'block':'none'; }
+let loginPollTimer=null;
+async function startDesktopLogin(){
+  const btn=$('loginBtn'); const note=$('loginNotConfigured');
+  try{
+    const r=await fetch('/api/auth/url'); const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Discord belum dikonfigurasi.');
+    window.open(d.url,'_blank'); // Electron opens this in the default browser
+    btn.innerText='Menunggu login di browser...'; btn.style.pointerEvents='none'; btn.style.opacity='.7';
+    note.style.display='block';
+    note.innerHTML='Browser terbuka untuk login Discord. Setelah berhasil, kembali ke aplikasi ini — kamu akan otomatis masuk.';
+    if(loginPollTimer) clearInterval(loginPollTimer);
+    let tries=0;
+    loginPollTimer=setInterval(async()=>{
+      tries++;
+      try{ const p=await (await fetch('/api/auth/poll?pid='+encodeURIComponent(d.pid))).json(); if(p.ready){ clearInterval(loginPollTimer); loginPollTimer=null; initAuth(); return; } }catch{}
+      if(tries>240){ clearInterval(loginPollTimer); loginPollTimer=null; btn.innerText='Login dengan Discord'; btn.style.pointerEvents=''; btn.style.opacity=''; note.innerHTML='Waktu login habis. Coba lagi.'; }
+    },1500);
+  }catch(e){ alert(e.message); }
+}
 async function saveAppConfig(){
   const btn=$('saveCfgBtn'); const msg=$('cfgMsg');
   const clientId=$('cfgClientId').value.trim(); const clientSecret=$('cfgClientSecret').value.trim();
