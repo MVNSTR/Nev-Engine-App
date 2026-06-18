@@ -51,8 +51,12 @@ function startServer() {
     DISCORD_CALLBACK_URL: `${APP_URL}/auth/discord/callback`,
     OPEN_BROWSER: '0',
     NEV_DATA_DIR: app.getPath('userData'),
+    ALLOW_APP_CONFIG: '1',
+    DEFAULT_DAILY_CONVERT_LIMIT: '-1',
+    DEFAULT_DAILY_UPLOAD_LIMIT: '-1',
     SESSION_SECRET: secrets.SESSION_SECRET,
     APP_SECRET: secrets.APP_SECRET,
+    ALLOW_APP_CONFIG: '1',
     ELECTRON_RUN_AS_NODE: '1'
   };
   serverProcess = fork(serverEntry(), [], { env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });

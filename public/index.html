@@ -323,14 +323,31 @@
   <div class="login-view" id="loginView">
     <div class="login-card">
       <div class="login-logo">🎧</div>
-      <div class="kicker">Discord Login</div>
-      <h1 class="login-title">NEV Audio Engine</h1>
-      <p class="login-text">Login with Discord to keep your conversion history, playable IDs, and Roblox accounts separated from other users.</p>
-      <a class="btn primary full" href="/auth/discord" style="text-decoration:none">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.885 3c-.21.375-.444.88-.608 1.28a18.27 18.27 0 0 0-5.487 0A12.6 12.6 0 0 0 9.18 3a19.74 19.74 0 0 0-4.435 1.37C2.06 8.35 1.33 12.22 1.69 16.04a19.92 19.92 0 0 0 5.993 3.03c.484-.66.915-1.36 1.286-2.094-.71-.266-1.39-.595-2.03-.984.17-.124.336-.254.497-.388 3.91 1.79 8.14 1.79 12.004 0 .163.135.33.265.5.388-.642.39-1.323.72-2.033.985.37.73.8 1.43 1.285 2.092a19.86 19.86 0 0 0 5.996-3.03c.42-4.43-.717-8.27-2.157-11.67ZM8.02 13.65c-1.182 0-2.157-1.085-2.157-2.42 0-1.334.953-2.42 2.157-2.42 1.214 0 2.18 1.097 2.157 2.42 0 1.335-.953 2.42-2.157 2.42Zm7.96 0c-1.18 0-2.157-1.085-2.157-2.42 0-1.334.954-2.42 2.157-2.42 1.215 0 2.18 1.097 2.158 2.42 0 1.335-.943 2.42-2.158 2.42Z"/></svg>
-        Login with Discord
-      </a>
-      <div class="hint" style="margin-top:16px">❤️❤️❤️</div>
+      <div id="loginMain">
+        <div class="kicker">Discord Login</div>
+        <h1 class="login-title">NEV Audio Engine</h1>
+        <p class="login-text">Login with Discord to keep your conversion history, playable IDs, and Roblox accounts separated from other users.</p>
+        <a class="btn primary full" id="loginBtn" href="/auth/discord" style="text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.885 3c-.21.375-.444.88-.608 1.28a18.27 18.27 0 0 0-5.487 0A12.6 12.6 0 0 0 9.18 3a19.74 19.74 0 0 0-4.435 1.37C2.06 8.35 1.33 12.22 1.69 16.04a19.92 19.92 0 0 0 5.993 3.03c.484-.66.915-1.36 1.286-2.094-.71-.266-1.39-.595-2.03-.984.17-.124.336-.254.497-.388 3.91 1.79 8.14 1.79 12.004 0 .163.135.33.265.5.388-.642.39-1.323.72-2.033.985.37.73.8 1.43 1.285 2.092a19.86 19.86 0 0 0 5.996-3.03c.42-4.43-.717-8.27-2.157-11.67ZM8.02 13.65c-1.182 0-2.157-1.085-2.157-2.42 0-1.334.953-2.42 2.157-2.42 1.214 0 2.18 1.097 2.157 2.42 0 1.335-.953 2.42-2.157 2.42Zm7.96 0c-1.18 0-2.157-1.085-2.157-2.42 0-1.334.954-2.42 2.157-2.42 1.215 0 2.18 1.097 2.158 2.42 0 1.335-.943 2.42-2.158 2.42Z"/></svg>
+          Login with Discord
+        </a>
+        <div id="loginNotConfigured" class="hint" style="margin-top:16px;display:none">Discord belum dikonfigurasi. Klik <b>Setup Discord</b> di bawah untuk mengisi Client ID & Secret.</div>
+        <button class="btn ghost full" id="openSetupBtn" style="margin-top:10px;display:none" onclick="showSetup(true)">⚙️ Setup Discord</button>
+        <div class="hint" style="margin-top:16px">❤️❤️❤️</div>
+      </div>
+      <div id="loginSetup" style="display:none;text-align:left">
+        <div class="kicker" style="justify-content:flex-start">Setup Discord</div>
+        <h1 class="login-title" style="font-size:22px">Konfigurasi Discord App</h1>
+        <p class="login-text" style="margin-bottom:16px">Buat aplikasi di Discord Developer Portal, lalu tambahkan Redirect URL di bawah ini di tab OAuth2.</p>
+        <div class="form-row"><label>Redirect URL (copy ke Discord OAuth2 → Redirects)</label>
+          <div style="display:flex;gap:8px"><input class="input" id="cfgCallback" readonly><button class="btn ghost" type="button" onclick="copyText($('cfgCallback').value)">Copy</button></div>
+        </div>
+        <div class="form-row"><label>Client ID</label><input class="input" id="cfgClientId" placeholder="1234567890..."></div>
+        <div class="form-row"><label>Client Secret</label><input class="input" type="password" id="cfgClientSecret" placeholder="Paste secret"></div>
+        <div id="cfgMsg" class="hint" style="display:none;margin-bottom:12px"></div>
+        <button class="btn primary full" id="saveCfgBtn" onclick="saveAppConfig()">Simpan & Lanjut</button>
+        <button class="btn ghost full" style="margin-top:10px" onclick="showSetup(false)">Kembali</button>
+      </div>
     </div>
   </div>
 
@@ -529,7 +546,36 @@ async function refreshMe(){
 function discordAvatar(user){if(!user||!user.avatar)return '';const ext=String(user.avatar).startsWith('a_')?'gif':'png';return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${ext}?size=64`}
 function renderUserBar(){const name=currentUser?.globalName||currentUser?.username||'User';const avatar=discordAvatar(currentUser);$('userBar').innerHTML=`<div class="profile">${avatar?`<img class="avatar" src="${avatar}" alt="">`:`<div class="avatar">${escapeHtml(name[0]||'U')}</div>`}<div><div class="profile-name">${escapeHtml(name)}</div><div class="profile-sub">${currentUser?.isAdmin?'Admin':'Discord user'}</div></div></div><button class="btn ghost" onclick="logout()">Logout</button>`}
 async function logout(){await fetch('/api/logout',{method:'POST'});location.href='/'}
-async function initAuth(){const r=await fetch('/api/me');const data=await r.json();if(!data.authenticated){$('loginView').style.display='flex';$('appRoot').style.display='none';return;}currentUser=data.user;$('loginView').style.display='none';$('appRoot').style.display='block';renderUserBar();renderUsageLimit();if(currentUser.isAdmin)$('adminNavBtn').style.display='block';loadAccounts();loadHistory();loadSavedNotes();}
+async function initAuth(){const r=await fetch('/api/me');const data=await r.json();if(!data.authenticated){$('loginView').style.display='flex';$('appRoot').style.display='none';await initLoginConfig();return;}currentUser=data.user;$('loginView').style.display='none';$('appRoot').style.display='block';renderUserBar();renderUsageLimit();if(currentUser.isAdmin)$('adminNavBtn').style.display='block';loadAccounts();loadHistory();loadSavedNotes();}
+let appConfig={};
+async function initLoginConfig(){
+  try{ appConfig=await (await fetch('/api/app-config')).json(); }catch{ appConfig={}; }
+  $('cfgCallback').value=appConfig.callbackUrl||'';
+  $('cfgClientId').value=appConfig.clientId||'';
+  const configured=appConfig.configured;
+  // Login button only works when configured; otherwise nudge to setup.
+  $('loginBtn').style.display=configured?'inline-flex':'none';
+  $('loginNotConfigured').style.display=configured?'none':'block';
+  // Show the setup toggle only on the desktop app (editable), where creds can be set.
+  $('openSetupBtn').style.display=(appConfig.editable && configured)?'block':'none';
+  if(appConfig.editable && !configured) showSetup(true); else showSetup(false);
+}
+function showSetup(on){ $('loginMain').style.display=on?'none':'block'; $('loginSetup').style.display=on?'block':'none'; }
+async function saveAppConfig(){
+  const btn=$('saveCfgBtn'); const msg=$('cfgMsg');
+  const clientId=$('cfgClientId').value.trim(); const clientSecret=$('cfgClientSecret').value.trim();
+  if(!clientId){ msg.style.display='block'; msg.style.borderColor='rgba(239,68,68,.3)'; msg.style.color='#fecaca'; msg.innerText='Client ID wajib diisi.'; return; }
+  btn.disabled=true; btn.innerText='Menyimpan...';
+  try{
+    const r=await fetch('/api/app-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({discordClientId:clientId,discordClientSecret:clientSecret})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Gagal menyimpan.');
+    await initLoginConfig();
+    if(d.configured){ msg.style.display='none'; showSetup(false); }
+    else { msg.style.display='block'; msg.style.borderColor='rgba(34,197,94,.26)'; msg.style.color='#a7e9c4'; msg.innerText='Client ID tersimpan. Isi Client Secret juga untuk bisa login.'; }
+  }catch(e){ msg.style.display='block'; msg.style.borderColor='rgba(239,68,68,.3)'; msg.style.color='#fecaca'; msg.innerText=e.message; }
+  finally{ btn.disabled=false; btn.innerText='Simpan & Lanjut'; }
+}
 async function loadAdminUsers(){if(!currentUser?.isAdmin)return;const r=await fetch('/api/admin/users');const users=await r.json();if(!r.ok){$('adminUsersBox').innerHTML='<div class="empty">Unable to load admin users.</div>';return;}$('adminUsersBox').innerHTML=users.length?users.map(u=>`<div class="admin-row"><div><b>${escapeHtml(u.globalName||u.username)}</b><div class="item-meta">${u.id}<br>${u.isOnline?'<span class="online-dot"></span>Online':'<span class="offline-dot"></span>Offline'} · Last login: ${u.lastLoginAt?new Date(u.lastLoginAt).toLocaleString():'-'}</div></div><div><span class="status ${u.isBlocked?'failed':'available'}">${u.isBlocked?'blocked':'active'}</span></div><div class="item-meta">C: ${u.usageToday?.convert||0}</div><div class="item-meta">U: ${u.usageToday?.upload||0}</div><input class="input" id="conv_${u.id}" type="number" value="${u.dailyConvertLimit||0}" min="0"><input class="input" id="upl_${u.id}" type="number" value="${u.dailyUploadLimit||0}" min="0"><div class="actions" style="grid-column:1/-1"><button class="mini" onclick="saveAdminUser('${escAttr(u.id)}',${u.isBlocked?'false':'undefined'})">Save Limits</button><button class="mini" onclick="saveAdminUser('${escAttr(u.id)}',${u.isBlocked?'false':'true'})">${u.isBlocked?'Unblock':'Block'}</button></div></div>`).join(''):'<div class="empty">No users yet.</div>'}
 async function saveAdminUser(id,blocked){const body={dailyConvertLimit:Number($('conv_'+id).value),dailyUploadLimit:Number($('upl_'+id).value)};if(blocked!==undefined)body.isBlocked=blocked==='true'||blocked===true;const r=await fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||'Failed to update user.')}loadAdminUsers()}
 function copyText(t){navigator.clipboard.writeText(t);alert('Copied: '+t)}function escapeHtml(t){const d=document.createElement('div');d.innerText=t??'';return d.innerHTML}function escAttr(t){return String(t??'').replace(/'/g,'&#39;').replace(/"/g,'&quot;')}

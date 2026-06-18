@@ -34,6 +34,10 @@ const PUBLIC_DIR = path.join(ROOT, 'public');
 const GLOBAL_USERS_FILE = path.join(GLOBAL_DIR, 'users.json');
 const SESSIONS_FILE = path.join(GLOBAL_DIR, 'sessions.json');
 const YT_COOKIES_FILE = path.join(DATA_DIR, 'youtube-cookies.txt');
+const APP_CONFIG_FILE = path.join(DATA_DIR, 'app-config.json');
+// Enabled by the Electron desktop app so Discord credentials can be set from the
+// Settings UI. Disabled on server/web deployments (those use env vars instead).
+const ALLOW_APP_CONFIG = process.env.ALLOW_APP_CONFIG === '1';
 
 const ROBLOX_LIMIT_SECONDS = 7 * 60;
 const AUTO_SPLIT_SECONDS = 6 * 60;
@@ -227,6 +231,17 @@ function dec(payload) {
 }
 function publicAccount(a){ return { id:a.id, label:a.label, userId:a.userId||'', groupId:a.groupId||'', defaultDescription:a.defaultDescription||DEFAULT_DESCRIPTION, isDefault:Boolean(a.isDefault), apiKeyMasked: maskKey(dec(a.apiKeyEnc||a.apiKey||'')), createdAt:a.createdAt, updatedAt:a.updatedAt }; }
 
+// ---- App-level (Discord) configuration, stored locally & encrypted ----
+function getAppConfig(){ return readJson(APP_CONFIG_FILE, {}); }
+function saveAppConfig(c){ writeJson(APP_CONFIG_FILE, c, true); }
+function discordCfg(){
+  const c = getAppConfig();
+  const clientId = (c.discordClientId || DISCORD_CLIENT_ID || '').trim();
+  let clientSecret = DISCORD_CLIENT_SECRET || '';
+  if (c.discordClientSecretEnc) { try { clientSecret = dec(c.discordClientSecretEnc); } catch {} }
+  return { clientId, clientSecret };
+}
+
 function sanitizeTitle(input){ return String(input||'Untitled Audio').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g,'').replace(/\s+/g,' ').slice(0,90) || 'Untitled Audio'; }
 function sanitizeFileName(input){ return sanitizeTitle(input).replace(/[^\w\s.\-()[\]]/g,'').trim() || 'Untitled Audio'; }
 function sanitizeRobloxName(input){ return sanitizeTitle(input).slice(0,50); }
@@ -414,8 +429,10 @@ cleanupTempDirs();
 setInterval(()=>{ cleanupTempDirs(); for(const u of readGlobalUsers()) expireOldFiles(u.id); }, 5*60*1000);
 setInterval(()=>{ (async()=>{ for(const u of readGlobalUsers()){ for(const job of getHistory(u.id)){ if((job.songNotes||[]).some(n=>n.status==='checking')) await recheckJob(u.id,job.id,false); } } })().catch(e=>console.error(e)); }, 60*1000);
 
-app.get('/auth/discord', (req,res)=>{ if(!DISCORD_CLIENT_ID) return res.status(500).send('DISCORD_CLIENT_ID is not configured.'); const state=uuidv4(); const url=new URL('https://discord.com/oauth2/authorize'); url.searchParams.set('client_id',DISCORD_CLIENT_ID); url.searchParams.set('redirect_uri',DISCORD_CALLBACK_URL); url.searchParams.set('response_type','code'); url.searchParams.set('scope','identify email'); url.searchParams.set('state',state); res.redirect(url.toString()); });
-app.get('/auth/discord/callback', async (req,res)=>{ try{ const code=String(req.query.code||''); if(!code) return res.status(400).send('Missing code'); const tokenRes=await fetch('https://discord.com/api/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:DISCORD_CLIENT_ID,client_secret:DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:DISCORD_CALLBACK_URL})}); const token=await tokenRes.json(); if(!tokenRes.ok) return res.status(400).send(`Discord token error: ${JSON.stringify(token)}`); const meRes=await fetch('https://discord.com/api/users/@me',{headers:{Authorization:`Bearer ${token.access_token}`}}); const me=await meRes.json(); if(!meRes.ok) return res.status(400).send(`Discord user error: ${JSON.stringify(me)}`); const users=readGlobalUsers(); const now=new Date().toISOString(); let user=users.find(u=>u.id===me.id); if(!user){ user={id:me.id,username:me.username,globalName:me.global_name||me.username,avatar:me.avatar,email:me.email||null,firstLoginAt:now,dailyConvertLimit:DEFAULT_DAILY_CONVERT_LIMIT,dailyUploadLimit:DEFAULT_DAILY_UPLOAD_LIMIT,isBlocked:false}; users.unshift(user); ensureUserFiles(me.id); } user.username=me.username; user.globalName=me.global_name||me.username; user.avatar=me.avatar; user.email=me.email||user.email||null; user.lastLoginAt=now; user.lastSeenAt=now; saveGlobalUsers(users); const sessions=readSessions(); const sid=uuidv4(); sessions.push({id:sid,discordId:me.id,createdAt:now,lastSeenAt:now}); saveSessions(sessions); setSessionCookie(res,sid); res.redirect('/'); }catch(e){ res.status(500).send(e.message); } });
+app.get('/auth/discord', (req,res)=>{ const {clientId}=discordCfg(); if(!clientId) return res.status(500).send('Discord belum dikonfigurasi. Buka halaman setup dulu.'); const state=uuidv4(); const url=new URL('https://discord.com/oauth2/authorize'); url.searchParams.set('client_id',clientId); url.searchParams.set('redirect_uri',DISCORD_CALLBACK_URL); url.searchParams.set('response_type','code'); url.searchParams.set('scope','identify email'); url.searchParams.set('state',state); res.redirect(url.toString()); });
+app.get('/auth/discord/callback', async (req,res)=>{ try{ const {clientId,clientSecret}=discordCfg(); const code=String(req.query.code||''); if(!code) return res.status(400).send('Missing code'); const tokenRes=await fetch('https://discord.com/api/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,client_secret:clientSecret,grant_type:'authorization_code',code,redirect_uri:DISCORD_CALLBACK_URL})}); const token=await tokenRes.json(); if(!tokenRes.ok) return res.status(400).send(`Discord token error: ${JSON.stringify(token)}`); const meRes=await fetch('https://discord.com/api/users/@me',{headers:{Authorization:`Bearer ${token.access_token}`}}); const me=await meRes.json(); if(!meRes.ok) return res.status(400).send(`Discord user error: ${JSON.stringify(me)}`); const users=readGlobalUsers(); const now=new Date().toISOString(); let user=users.find(u=>u.id===me.id); if(!user){ user={id:me.id,username:me.username,globalName:me.global_name||me.username,avatar:me.avatar,email:me.email||null,firstLoginAt:now,dailyConvertLimit:DEFAULT_DAILY_CONVERT_LIMIT,dailyUploadLimit:DEFAULT_DAILY_UPLOAD_LIMIT,isBlocked:false}; users.unshift(user); ensureUserFiles(me.id); } user.username=me.username; user.globalName=me.global_name||me.username; user.avatar=me.avatar; user.email=me.email||user.email||null; user.lastLoginAt=now; user.lastSeenAt=now; saveGlobalUsers(users); const sessions=readSessions(); const sid=uuidv4(); sessions.push({id:sid,discordId:me.id,createdAt:now,lastSeenAt:now}); saveSessions(sessions); setSessionCookie(res,sid); res.redirect('/'); }catch(e){ res.status(500).send(e.message); } });
+app.get('/api/app-config', (req,res)=>{ const {clientId,clientSecret}=discordCfg(); res.json({ configured:Boolean(clientId&&clientSecret), clientId, callbackUrl:DISCORD_CALLBACK_URL, editable:ALLOW_APP_CONFIG }); });
+app.post('/api/app-config', (req,res)=>{ if(!ALLOW_APP_CONFIG) return res.status(403).json({error:'Config editing is disabled on this deployment.'}); const c=getAppConfig(); if(req.body.discordClientId!==undefined) c.discordClientId=String(req.body.discordClientId||'').trim(); if(req.body.discordClientSecret){ c.discordClientSecretEnc=enc(String(req.body.discordClientSecret).trim()); } saveAppConfig(c); const {clientId,clientSecret}=discordCfg(); res.json({ ok:true, configured:Boolean(clientId&&clientSecret) }); });
 app.post('/api/logout', requireAuth, (req,res)=>{ const sessions=readSessions().filter(s=>s.id!==req.sessionId); saveSessions(sessions); clearSessionCookie(res); res.json({ok:true}); });
 app.get('/api/me', (req,res)=>{ res.json({authenticated:Boolean(req.user), user:req.user?{...publicUser(req.user), usageToday: usageSummary(req.user.id, req.user)}:null}); });
 
