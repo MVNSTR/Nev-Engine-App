@@ -39,6 +39,14 @@ const APP_CONFIG_FILE = path.join(DATA_DIR, 'app-config.json');
 // Settings UI. Disabled on server/web deployments (those use env vars instead).
 const ALLOW_APP_CONFIG = process.env.ALLOW_APP_CONFIG === '1';
 
+// Central auth mode: when set, this instance runs as a CLIENT (desktop app):
+// it proxies auth, identity, admin and usage/limits to the central authority
+// server, while all content data (history, accounts, cookies) stays local.
+// When empty, this instance IS the authority (the hosted server).
+const CENTRAL_AUTH_URL = (process.env.CENTRAL_AUTH_URL || '').replace(/\/+$/, '');
+const IS_CLIENT = Boolean(CENTRAL_AUTH_URL);
+const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
+
 const ROBLOX_LIMIT_SECONDS = 7 * 60;
 const AUTO_SPLIT_SECONDS = 6 * 60;
 const FILE_TTL_MS = (Number(process.env.OUTPUT_TTL_HOURS) || 2) * 60 * 60 * 1000;
@@ -189,8 +197,45 @@ function usageSummary(discordId, user) {
   };
 }
 
+// ---- Central auth client helpers (used only when IS_CLIENT) ----
+function readAuthToken(){ try{ return JSON.parse(fs.readFileSync(AUTH_FILE,'utf8')).token || ''; }catch{ return ''; } }
+function saveAuthToken(token){ writeJson(AUTH_FILE, { token, savedAt:new Date().toISOString() }, true); }
+function clearAuthToken(){ try{ fs.unlinkSync(AUTH_FILE); }catch{} }
+async function centralFetch(pathname, { method='GET', token, body, headers={} } = {}){
+  const h = { ...headers };
+  if (token) h.Authorization = `Bearer ${token}`;
+  if (body) h['Content-Type'] = 'application/json';
+  const r = await fetch(`${CENTRAL_AUTH_URL}${pathname}`, { method, headers:h, body: body ? JSON.stringify(body) : undefined });
+  const text = await r.text(); let json; try{ json = JSON.parse(text); }catch{ json = { raw:text }; }
+  return { ok:r.ok, status:r.status, json };
+}
+function bearerSid(req){
+  const h = req.headers.authorization || '';
+  if (!h.startsWith('Bearer ')) return null;
+  const val = h.slice(7).trim();
+  if (!val.includes('.')) return null;
+  const [s, sig] = val.split('.');
+  return sign(s) === sig ? s : null;
+}
+let clientUserCache = { token:null, me:null, ts:0 };
+
 async function attachUser(req, res, next) {
-  const sid = getSessionId(req);
+  if (IS_CLIENT) {
+    const token = readAuthToken();
+    if (!token) return next();
+    if (clientUserCache.token === token && clientUserCache.me && Date.now() - clientUserCache.ts < 15000) {
+      req.centralMe = clientUserCache.me; req.user = clientUserCache.me.user; req.authToken = token; return next();
+    }
+    try {
+      const r = await centralFetch('/api/me', { token });
+      if (r.ok && r.json && r.json.authenticated && r.json.user) {
+        clientUserCache = { token, me:r.json, ts:Date.now() };
+        req.centralMe = r.json; req.user = r.json.user; req.authToken = token;
+      } else if (r.status === 401) { clearAuthToken(); clientUserCache = { token:null, me:null, ts:0 }; }
+    } catch (e) { /* central offline: stay unauthenticated */ }
+    return next();
+  }
+  const sid = getSessionId(req) || bearerSid(req);
   if (!sid) return next();
   const sessions = readSessions();
   const session = sessions.find(s => s.id === sid);
@@ -209,7 +254,20 @@ async function attachUser(req, res, next) {
 }
 app.use(attachUser);
 function requireAuth(req,res,next){ if(!req.user) return res.status(401).json({error:'Login required'}); if(req.user.isBlocked) return res.status(403).json({error:'Your account is blocked'}); next(); }
-function requireAdmin(req,res,next){ if(!req.user || !isAdminId(req.user.id)) return res.status(403).json({error:'Admin only'}); next(); }
+function requireAdmin(req,res,next){ const admin = IS_CLIENT ? Boolean(req.user && req.user.isAdmin) : Boolean(req.user && isAdminId(req.user.id)); if(!admin) return res.status(403).json({error:'Admin only'}); next(); }
+// Enforce a daily limit. Authority mode checks/increments local usage; client
+// mode delegates to the central server so an admin can control it globally.
+async function consumeLimit(req, type){
+  if (IS_CLIENT) {
+    try {
+      const r = await centralFetch('/api/usage/consume', { method:'POST', token:req.authToken, body:{ type } });
+      if (!r.ok) return (r.json && r.json.error) || 'Daily limit reached.';
+      clientUserCache = { token:null, me:null, ts:0 }; // refresh usage on next /api/me
+      return null;
+    } catch (e) { return 'Tidak bisa menghubungi server pusat untuk cek limit.'; }
+  }
+  const err = checkLimit(req, type); if (err) return err; bumpUsage(req.user.id, type); return null;
+}
 
 function maskKey(key){ if(!key) return ''; if(key.length <= 12) return '••••••••'; return `${key.slice(0,4)}••••••••${key.slice(-4)}`; }
 function enc(text) {
@@ -435,12 +493,13 @@ app.get('/auth/discord/callback', async (req,res)=>{ try{ const {clientId,client
 const pendingLogins = new Map();
 function closeTabHtml(){ return `<!doctype html><html lang="id"><head><meta charset="utf-8"><title>Login berhasil</title><style>*{margin:0;box-sizing:border-box}body{height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(700px 400px at 50% -10%,rgba(34,197,94,.16),transparent 60%),#0a0f0c;color:#eef5f1;font-family:system-ui,'Segoe UI',sans-serif}.c{text-align:center;padding:30px}.ic{width:64px;height:64px;margin:0 auto 16px;border-radius:18px;display:grid;place-items:center;font-size:30px;background:linear-gradient(135deg,#22c55e,#34d399);color:#04130b}.c h1{font-size:21px;margin-bottom:8px}.c p{color:#8b9d94;font-size:14px;line-height:1.6}</style></head><body><div class="c"><div class="ic">✅</div><h1>Login berhasil!</h1><p>Kamu bisa menutup tab/jendela ini.<br>Aplikasi NEV Audio Engine akan otomatis masuk.</p></div></body></html>`; }
 function prunePending(){ const now=Date.now(); for(const [k,v] of pendingLogins){ const ts=v&&v.ts?v.ts:0; if(now-ts>10*60*1000 && !(v&&v.sid)) pendingLogins.delete(k); } }
-app.get('/api/auth/url', (req,res)=>{ const {clientId}=discordCfg(); if(!clientId) return res.status(400).json({error:'Discord belum dikonfigurasi.'}); prunePending(); const pid=uuidv4(); pendingLogins.set(pid,{ts:Date.now()}); const url=new URL('https://discord.com/oauth2/authorize'); url.searchParams.set('client_id',clientId); url.searchParams.set('redirect_uri',DISCORD_CALLBACK_URL); url.searchParams.set('response_type','code'); url.searchParams.set('scope','identify email'); url.searchParams.set('state',pid); res.json({ url:url.toString(), pid }); });
-app.get('/api/auth/poll', (req,res)=>{ const pid=String(req.query.pid||''); const v=pendingLogins.get(pid); if(v && v.sid){ pendingLogins.delete(pid); setSessionCookie(res,v.sid); return res.json({ready:true}); } res.json({ready:false}); });
-app.get('/api/app-config', (req,res)=>{ const {clientId,clientSecret}=discordCfg(); res.json({ configured:Boolean(clientId&&clientSecret), clientId, callbackUrl:DISCORD_CALLBACK_URL, editable:ALLOW_APP_CONFIG, desktop:Boolean(process.env.ELECTRON_RUN_AS_NODE) }); });
+app.get('/api/auth/url', async (req,res)=>{ if(IS_CLIENT){ try{ const r=await centralFetch('/api/auth/url'); return res.status(r.status).json(r.json); }catch(e){ return res.status(502).json({error:'Tidak bisa menghubungi server pusat.'}); } } const {clientId}=discordCfg(); if(!clientId) return res.status(400).json({error:'Discord belum dikonfigurasi.'}); prunePending(); const pid=uuidv4(); pendingLogins.set(pid,{ts:Date.now()}); const url=new URL('https://discord.com/oauth2/authorize'); url.searchParams.set('client_id',clientId); url.searchParams.set('redirect_uri',DISCORD_CALLBACK_URL); url.searchParams.set('response_type','code'); url.searchParams.set('scope','identify email'); url.searchParams.set('state',pid); res.json({ url:url.toString(), pid }); });
+app.get('/api/auth/poll', async (req,res)=>{ const pid=String(req.query.pid||''); if(IS_CLIENT){ try{ const r=await centralFetch('/api/auth/poll?pid='+encodeURIComponent(pid)); if(r.json && r.json.ready && r.json.token){ saveAuthToken(r.json.token); clientUserCache={token:null,me:null,ts:0}; return res.json({ready:true}); } return res.json({ready:false}); }catch(e){ return res.json({ready:false}); } } const v=pendingLogins.get(pid); if(v && v.sid){ pendingLogins.delete(pid); setSessionCookie(res,v.sid); return res.json({ready:true, token:`${v.sid}.${sign(v.sid)}`}); } res.json({ready:false}); });
+app.get('/api/app-config', async (req,res)=>{ if(IS_CLIENT){ let configured=true; try{ const r=await centralFetch('/api/app-config'); configured=Boolean(r.json && r.json.configured); }catch{} return res.json({ configured, clientId:'', callbackUrl:'', editable:false, desktop:true }); } const {clientId,clientSecret}=discordCfg(); res.json({ configured:Boolean(clientId&&clientSecret), clientId, callbackUrl:DISCORD_CALLBACK_URL, editable:ALLOW_APP_CONFIG, desktop:Boolean(process.env.ELECTRON_RUN_AS_NODE) }); });
 app.post('/api/app-config', (req,res)=>{ if(!ALLOW_APP_CONFIG) return res.status(403).json({error:'Config editing is disabled on this deployment.'}); const c=getAppConfig(); if(req.body.discordClientId!==undefined) c.discordClientId=String(req.body.discordClientId||'').trim(); if(req.body.discordClientSecret){ c.discordClientSecretEnc=enc(String(req.body.discordClientSecret).trim()); } saveAppConfig(c); const {clientId,clientSecret}=discordCfg(); res.json({ ok:true, configured:Boolean(clientId&&clientSecret) }); });
-app.post('/api/logout', requireAuth, (req,res)=>{ const sessions=readSessions().filter(s=>s.id!==req.sessionId); saveSessions(sessions); clearSessionCookie(res); res.json({ok:true}); });
-app.get('/api/me', (req,res)=>{ res.json({authenticated:Boolean(req.user), user:req.user?{...publicUser(req.user), usageToday: usageSummary(req.user.id, req.user)}:null}); });
+app.post('/api/logout', requireAuth, async (req,res)=>{ if(IS_CLIENT){ try{ await centralFetch('/api/logout',{method:'POST',token:req.authToken}); }catch{} clearAuthToken(); clientUserCache={token:null,me:null,ts:0}; return res.json({ok:true}); } const sessions=readSessions().filter(s=>s.id!==req.sessionId); saveSessions(sessions); clearSessionCookie(res); res.json({ok:true}); });
+app.get('/api/me', (req,res)=>{ if(IS_CLIENT){ return res.json(req.centralMe || {authenticated:false, user:null}); } res.json({authenticated:Boolean(req.user), user:req.user?{...publicUser(req.user), usageToday: usageSummary(req.user.id, req.user)}:null}); });
+app.post('/api/usage/consume', requireAuth, (req,res)=>{ const type=(req.body && req.body.type==='upload')?'upload':'convert'; const err=checkLimit(req,type); if(err) return res.status(429).json({error:err}); bumpUsage(req.user.id,type); res.json({ok:true, usageToday: usageSummary(req.user.id, req.user)}); });
 
 app.get('/api/accounts', requireAuth, (req,res)=> res.json(getAccounts(req.user.id).map(publicAccount)));
 app.post('/api/accounts', requireAuth, (req,res)=>{ const accounts=getAccounts(req.user.id); const now=new Date().toISOString(); const incomingKey=String(req.body.apiKey||'').trim(); if(!incomingKey) return res.status(400).json({error:'API key is required'}); const item={id:uuidv4(),label:sanitizeTitle(req.body.label||'Roblox Account'),apiKeyEnc:enc(incomingKey),userId:String(req.body.userId||'').trim(),groupId:String(req.body.groupId||'').trim(),defaultDescription:String(req.body.defaultDescription||DEFAULT_DESCRIPTION),isDefault:accounts.length===0 || Boolean(req.body.isDefault),createdAt:now,updatedAt:now}; if(item.isDefault) accounts.forEach(a=>a.isDefault=false); accounts.push(item); saveAccounts(req.user.id,accounts); res.json(publicAccount(item)); });
@@ -458,12 +517,12 @@ app.post('/api/notes/:jobId/:part/mark-playable', requireAuth, (req,res)=>{ cons
 app.post('/api/notes/:jobId/:part/mark-failed', requireAuth, (req,res)=>{ const job=getJob(req.user.id,req.params.jobId); if(!job) return res.status(404).json({error:'Job not found'}); const notes=(job.songNotes||[]).map(n=>{ if(Number(n.part)===Number(req.params.part)){ n.status='failed'; n.reason=String(req.body.reason||'Marked failed manually'); } return n; }); updateJob(req.user.id,job.id,{songNotes:notes}); res.json(getJob(req.user.id,job.id)); });
 app.post('/api/jobs/:id/recheck-roblox', requireAuth, async (req,res)=> res.json(await recheckJob(req.user.id,req.params.id,true)));
 
-app.post('/api/jobs/upload', requireAuth, upload.single('audio'), (req,res)=>{ const limit=checkLimit(req,'convert'); if(limit) return res.status(429).json({error:limit}); if(!req.file) return res.status(400).json({error:'Audio file is required'}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||path.parse(req.file.originalname).name); const job=createJob(req.user.id,{title,sourceType:'upload',originalName:req.file.originalname,speed,amplify}); bumpUsage(req.user.id,'convert'); processJob(req.user.id,job.id,req.file.path,title,speed,amplify); res.json({jobId:job.id}); });
-app.post('/api/jobs/link', requireAuth, (req,res)=>{ const limit=checkLimit(req,'convert'); if(limit) return res.status(429).json({error:limit}); const url=String(req.body.url||'').trim(); if(!url||!isSupportedLink(url)) return res.status(400).json({error:'Use a YouTube or SoundCloud link'}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||'Downloaded Audio'); const job=createJob(req.user.id,{title,sourceType:'link',sourceUrl:normalizeMediaUrl(url),originalName:'Downloaded Audio',speed,amplify}); bumpUsage(req.user.id,'convert'); processLinkJob(req.user.id,job.id,normalizeMediaUrl(url),title,speed,amplify); res.json({jobId:job.id}); });
-app.post('/api/jobs/:id/upload-roblox', requireAuth, (req,res)=>{ const limit=checkLimit(req,'upload'); if(limit) return res.status(429).json({error:limit}); bumpUsage(req.user.id,'upload'); uploadJob(req.user.id,{jobId:req.params.id,accountId:req.body.accountId,target:req.body.target==='group'?'group':'user',assetName:req.body.assetName,description:req.body.description}).catch(e=>{ updateJob(req.user.id,req.params.id,{robloxStatus:'failed'}); addLog(req.user.id,req.params.id,`Roblox upload error: ${e.message}`); }); res.json({ok:true}); });
+app.post('/api/jobs/upload', requireAuth, upload.single('audio'), async (req,res)=>{ if(!req.file) return res.status(400).json({error:'Audio file is required'}); const lim=await consumeLimit(req,'convert'); if(lim) return res.status(429).json({error:lim}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||path.parse(req.file.originalname).name); const job=createJob(req.user.id,{title,sourceType:'upload',originalName:req.file.originalname,speed,amplify}); processJob(req.user.id,job.id,req.file.path,title,speed,amplify); res.json({jobId:job.id}); });
+app.post('/api/jobs/link', requireAuth, async (req,res)=>{ const url=String(req.body.url||'').trim(); if(!url||!isSupportedLink(url)) return res.status(400).json({error:'Use a YouTube or SoundCloud link'}); const lim=await consumeLimit(req,'convert'); if(lim) return res.status(429).json({error:lim}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||'Downloaded Audio'); const job=createJob(req.user.id,{title,sourceType:'link',sourceUrl:normalizeMediaUrl(url),originalName:'Downloaded Audio',speed,amplify}); processLinkJob(req.user.id,job.id,normalizeMediaUrl(url),title,speed,amplify); res.json({jobId:job.id}); });
+app.post('/api/jobs/:id/upload-roblox', requireAuth, async (req,res)=>{ const lim=await consumeLimit(req,'upload'); if(lim) return res.status(429).json({error:lim}); uploadJob(req.user.id,{jobId:req.params.id,accountId:req.body.accountId,target:req.body.target==='group'?'group':'user',assetName:req.body.assetName,description:req.body.description}).catch(e=>{ updateJob(req.user.id,req.params.id,{robloxStatus:'failed'}); addLog(req.user.id,req.params.id,`Roblox upload error: ${e.message}`); }); res.json({ok:true}); });
 
-app.get('/api/admin/users', requireAuth, requireAdmin, (req,res)=>{ const sessions=readSessions(); const users=readGlobalUsers().map(u=>{ const usage=getUsage(u.id)[todayKey()]||{convert:0,upload:0}; const online=sessions.some(s=>s.discordId===u.id && Date.now()-new Date(s.lastSeenAt||0).getTime()<ONLINE_WINDOW_MS); return {...publicUser(u),usageToday:usage,isOnline:online,accountsCount:getAccounts(u.id).length,historyCount:getHistory(u.id).length,notesCount:getNotes(u.id).length}; }); res.json(users); });
-app.put('/api/admin/users/:id', requireAuth, requireAdmin, (req,res)=>{ const users=readGlobalUsers(); const u=users.find(x=>x.id===req.params.id); if(!u) return res.status(404).json({error:'User not found'}); if(req.body.dailyConvertLimit !== undefined) u.dailyConvertLimit=Number(req.body.dailyConvertLimit); if(req.body.dailyUploadLimit !== undefined) u.dailyUploadLimit=Number(req.body.dailyUploadLimit); if(req.body.isBlocked !== undefined) u.isBlocked=Boolean(req.body.isBlocked); saveGlobalUsers(users); res.json(publicUser(u)); });
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req,res)=>{ if(IS_CLIENT){ try{ const r=await centralFetch('/api/admin/users',{token:req.authToken}); return res.status(r.status).json(r.json); }catch{ return res.status(502).json({error:'Server pusat tak terjangkau.'}); } } const sessions=readSessions(); const users=readGlobalUsers().map(u=>{ const usage=getUsage(u.id)[todayKey()]||{convert:0,upload:0}; const online=sessions.some(s=>s.discordId===u.id && Date.now()-new Date(s.lastSeenAt||0).getTime()<ONLINE_WINDOW_MS); return {...publicUser(u),usageToday:usage,isOnline:online,accountsCount:getAccounts(u.id).length,historyCount:getHistory(u.id).length,notesCount:getNotes(u.id).length}; }); res.json(users); });
+app.put('/api/admin/users/:id', requireAuth, requireAdmin, async (req,res)=>{ if(IS_CLIENT){ try{ const r=await centralFetch('/api/admin/users/'+encodeURIComponent(req.params.id),{method:'PUT',token:req.authToken,body:req.body}); return res.status(r.status).json(r.json); }catch{ return res.status(502).json({error:'Server pusat tak terjangkau.'}); } } const users=readGlobalUsers(); const u=users.find(x=>x.id===req.params.id); if(!u) return res.status(404).json({error:'User not found'}); if(req.body.dailyConvertLimit !== undefined) u.dailyConvertLimit=Number(req.body.dailyConvertLimit); if(req.body.dailyUploadLimit !== undefined) u.dailyUploadLimit=Number(req.body.dailyUploadLimit); if(req.body.isBlocked !== undefined) u.isBlocked=Boolean(req.body.isBlocked); saveGlobalUsers(users); res.json(publicUser(u)); });
 app.get('/api/admin/users/:id/detail', requireAuth, requireAdmin, (req,res)=>{ const users=readGlobalUsers(); const u=users.find(x=>x.id===req.params.id); if(!u) return res.status(404).json({error:'User not found'}); res.json({user:publicUser(u),usage:getUsage(u.id),accounts:getAccounts(u.id).map(publicAccount),history:getHistory(u.id).slice(0,50),notes:getNotes(u.id).slice(0,50)}); });
 
 app.get('*', (req,res)=> res.sendFile(path.join(PUBLIC_DIR,'index.html')));

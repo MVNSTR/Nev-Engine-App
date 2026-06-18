@@ -59,6 +59,7 @@ function startServer() {
     DISCORD_CALLBACK_URL: `${APP_URL}/auth/discord/callback`,
     OPEN_BROWSER: '0',
     NEV_DATA_DIR: app.getPath('userData'),
+    CENTRAL_AUTH_URL: process.env.CENTRAL_AUTH_URL || 'https://nevaudios.1happy.my.id',
     ALLOW_APP_CONFIG: '1',
     ADMIN_DISCORD_IDS: process.env.ADMIN_DISCORD_IDS || '889465786408775721',
     DEFAULT_DAILY_CONVERT_LIMIT: process.env.DEFAULT_DAILY_CONVERT_LIMIT || '10',
