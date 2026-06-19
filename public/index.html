@@ -324,6 +324,21 @@
 
     /* Nav item: subtle press feedback */
     .nav-item:active{transform:scale(.98)}
+
+    /* ===== Process stepper ===== */
+    .stepper{display:flex;align-items:center;margin-bottom:16px;padding:4px 2px}
+    .step{display:flex;flex-direction:column;align-items:center;gap:7px;flex:none;width:62px;text-align:center}
+    .step .dot{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--border2);background:rgba(255,255,255,.03);font-size:12px;font-weight:800;color:var(--muted);transition:.35s var(--ease-expo)}
+    .step .lbl{font-size:9px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em;transition:color .3s var(--ease)}
+    .step.active .dot{border-color:var(--accent);background:var(--accent-soft);color:var(--accent2);transform:scale(1.08);animation:stepPulse 1.5s var(--ease) infinite}
+    .step.done .dot{border-color:var(--green);background:var(--green);color:#04130b}
+    .step.active .lbl{color:#fff}.step.done .lbl{color:#a7e9c4}
+    .step-bar{flex:1;height:3px;background:var(--border2);position:relative;overflow:hidden;border-radius:3px;margin:0 -2px;margin-bottom:18px}
+    .step-bar::after{content:"";position:absolute;inset:0;border-radius:3px;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,var(--accent),var(--accent3))}
+    .step-bar.fill::after{transform:scaleX(1);transition:transform .5s var(--ease-expo)}
+    .step-bar.flow::after{transform:scaleX(1);background:linear-gradient(90deg,transparent,var(--accent2),transparent);background-size:200% 100%;animation:barFlow 1.2s linear infinite}
+    @keyframes stepPulse{0%,100%{box-shadow:0 0 0 4px rgba(124,92,255,.16)}50%{box-shadow:0 0 0 8px rgba(124,92,255,.04)}}
+    @keyframes barFlow{from{background-position:200% 0}to{background-position:-200% 0}}
   </style>
 </head>
 <body>
@@ -374,8 +389,9 @@
           <div class="nav-item active" data-panel="dashboard" onclick="openPanel('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg><span>Dashboard</span></div>
 
           <div class="sb-group">Upload &amp; Download</div>
-          <div class="nav-item" data-panel="converter" onclick="openPanel('converter')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="2" x2="12" y2="16"/></svg><span>Download &amp; Convert</span></div>
-          <div class="nav-item" data-panel="converter" onclick="openPanel('converter')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload Audio</span></div>
+          <div class="nav-item" data-panel="download" onclick="openPanel('download')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="2" x2="12" y2="16"/></svg><span>Download &amp; Convert</span></div>
+          <div class="nav-item" data-panel="convert" onclick="openPanel('convert')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload Audio</span></div>
+          <div class="nav-item" data-panel="roblox" onclick="openPanel('roblox')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>Upload to Roblox</span></div>
           <div class="nav-item" data-panel="animasi" onclick="openPanel('animasi')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span>Upload Animasi</span><span class="lock">🔒</span></div>
 
           <div class="sb-group">Library</div>
@@ -422,41 +438,46 @@
             </div>
           </section>
 
-          <!-- CONVERTER -->
-          <section id="converterPanel" class="panel">
-            <div class="grid">
-              <div class="stack">
-                <section class="card hov">
-                  <div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div><div class="card-title">Download &amp; Process</div><div class="card-desc">Upload file atau paste link YouTube/SoundCloud</div></div></div><span class="pill">OGG</span></div>
-                  <div class="card-body">
-                    <form id="convertForm">
-                      <div class="form-row"><label>Judul Lagu</label><input class="input" id="titleInput" name="title" placeholder="Contoh: Cyber Sunset" required></div>
-                      <div class="tabs"><button type="button" class="tab active" id="uploadModeBtn" onclick="setMode('upload')">Upload File</button><button type="button" class="tab" id="linkModeBtn" onclick="setMode('link')">Paste Link</button></div>
-                      <div id="uploadBox"><label class="drop" id="dropzone"><input id="audioInput" type="file" name="audio" accept=".mp3,.wav,.ogg,.flac,.m4a,.aac"><div><div class="plus">+</div><strong>Drop audio di sini</strong><span>atau klik untuk pilih file</span><div class="file-name" id="fileName">Belum ada file</div></div></label></div>
-                      <div id="linkBox" style="display:none"><div class="form-row"><label>YouTube / SoundCloud URL</label><input class="input" type="url" id="urlInput" placeholder="Paste link di sini..."></div></div>
-                      <div class="card" style="margin-top:16px"><div class="card-body"><div class="item-title">Speed-up</div><div class="item-meta">Set Roblox PlaybackSpeed ke nilai rekomendasi agar mendekati speed &amp; pitch asli.</div><input type="hidden" name="speed" id="speedInput" value="2.326"><div class="preset" style="margin-top:12px"><button type="button" class="active" data-speed="2.326">2.326x</button><button type="button" data-speed="2.3">2.3x</button><button type="button" data-speed="4">4x</button><button type="button" data-speed="6">6x</button><button type="button" data-speed="8.57">8.57x</button></div><div class="formula">Speed-up: <b id="speedText">2.326x</b><br>Roblox PlaybackSpeed: <b id="playbackText">0.43</b><br>Formula: PlaybackSpeed = 1 / speed-up</div></div></div>
-                      <div class="card" style="margin-top:16px"><div class="card-body"><div class="item-title">Volume</div><div class="item-meta">Default output gain -4dB.</div><input type="range" id="volumeSlider" name="amplify" min="-20" max="6" step="1" value="-4"><div class="formula">Output gain: <b id="volumeText">-4dB</b></div></div></div>
-                      <button class="btn primary full" id="convertBtn" style="margin-top:16px" type="submit">Convert Audio</button>
-                      <div class="result" id="result"></div>
-                    </form>
-                  </div>
-                </section>
+          <!-- ===== SHARED MOVABLE BLOCKS (moved between feature panels by JS) ===== -->
+          <div id="movables" style="display:none">
+            <section class="card" id="convertCard">
+              <div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div><div class="card-title" id="convertCardTitle">Upload Audio</div><div class="card-desc" id="convertCardDesc">Upload file lagu yang sudah kamu punya</div></div></div><span class="pill">OGG</span></div>
+              <div class="card-body">
+                <form id="convertForm">
+                  <div class="form-row"><label>Judul Lagu</label><input class="input" id="titleInput" name="title" placeholder="Contoh: Cyber Sunset" required></div>
+                  <div id="uploadBox"><label class="drop" id="dropzone"><input id="audioInput" type="file" name="audio" accept=".mp3,.wav,.ogg,.flac,.m4a,.aac"><div><div class="plus">+</div><strong>Drop audio di sini</strong><span>atau klik untuk pilih file</span><div class="file-name" id="fileName">Belum ada file</div></div></label></div>
+                  <div id="linkBox" style="display:none"><div class="form-row"><label>YouTube / SoundCloud URL</label><input class="input" type="url" id="urlInput" placeholder="Paste link di sini..."></div></div>
+                  <div class="card" style="margin-top:16px"><div class="card-body"><div class="item-title">Speed-up</div><div class="item-meta">Set Roblox PlaybackSpeed ke nilai rekomendasi agar mendekati speed &amp; pitch asli.</div><input type="hidden" name="speed" id="speedInput" value="2.326"><div class="preset" style="margin-top:12px"><button type="button" class="active" data-speed="2.326">2.326x</button><button type="button" data-speed="2.3">2.3x</button><button type="button" data-speed="4">4x</button><button type="button" data-speed="6">6x</button><button type="button" data-speed="8.57">8.57x</button></div><div class="formula">Speed-up: <b id="speedText">2.326x</b><br>Roblox PlaybackSpeed: <b id="playbackText">0.43</b><br>Formula: PlaybackSpeed = 1 / speed-up</div></div></div>
+                  <div class="card" style="margin-top:16px"><div class="card-body"><div class="item-title">Volume</div><div class="item-meta">Default output gain -4dB.</div><input type="range" id="volumeSlider" name="amplify" min="-20" max="6" step="1" value="-4"><div class="formula">Output gain: <b id="volumeText">-4dB</b></div></div></div>
+                  <button class="btn primary full" id="convertBtn" style="margin-top:16px" type="submit">Convert Audio</button>
+                </form>
               </div>
-              <aside class="right-mini">
-                <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="card-title">Limit Harian</div></div></div><span class="pill" id="limitDate">Today</span></div><div class="card-body"><div class="limit-grid"><div class="limit-box"><div class="limit-label">Convert</div><div class="limit-value" id="convertLimitText">0/10</div><div class="limit-bar"><div class="limit-fill" id="convertLimitFill"></div></div></div><div class="limit-box"><div class="limit-label">Upload</div><div class="limit-value" id="uploadLimitText">0/10</div><div class="limit-bar"><div class="limit-fill" id="uploadLimitFill"></div></div></div></div></div></section>
-                <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div><div><div class="card-title">Process Log</div></div></div><span class="pill live">Live</span></div><div class="card-body"><div class="state idle" id="processState"><div class="spinner"></div><div><div class="state-title" id="processTitle">Idle</div><div class="state-sub" id="processSubtitle">Tidak ada proses aktif.</div></div></div><div class="log" id="logBox"><div class="empty">Tidak ada proses aktif.</div></div></div></section>
-                <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><div class="card-title">Upload ke Roblox</div></div></div><span class="pill">Open Cloud</span></div><div class="card-body">
-                  <div class="form-row"><label>Converted Song</label><select class="select" id="songSelect"><option value="">Belum ada lagu aktif</option></select></div>
-                  <div class="form-row"><label>Akun Roblox</label><select class="select" id="accountSelect"></select></div>
-                  <div class="form-row"><label>Target</label><select class="select" id="uploadTarget"><option value="user">User</option><option value="group">Group</option></select></div>
-                  <div class="form-row"><label>Asset Name</label><input class="input" id="assetNameInput" placeholder="Auto dari judul"></div>
-                  <div class="form-row"><label>Description</label><textarea class="textarea" id="assetDescription">Exclusive tracks powered by NEV.</textarea></div>
-                  <div class="footer-row" style="margin-bottom:10px"><button class="btn ghost sm" onclick="openAccounts()">Kelola Akun</button></div>
-                  <button class="btn primary full" id="uploadRobloxBtn" onclick="uploadToRoblox()" disabled>Upload ke Roblox</button>
-                </div></section>
-              </aside>
+            </section>
+
+            <div id="sideBlock">
+              <section class="card" style="margin-bottom:18px"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="card-title">Limit Harian</div></div></div><span class="pill" id="limitDate">Today</span></div><div class="card-body"><div class="limit-grid"><div class="limit-box"><div class="limit-label">Convert</div><div class="limit-value" id="convertLimitText">0/10</div><div class="limit-bar"><div class="limit-fill" id="convertLimitFill"></div></div></div><div class="limit-box"><div class="limit-label">Upload</div><div class="limit-value" id="uploadLimitText">0/10</div><div class="limit-bar"><div class="limit-fill" id="uploadLimitFill"></div></div></div></div></div></section>
+              <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div><div><div class="card-title">Proses</div></div></div><span class="pill live">Live</span></div><div class="card-body"><div class="stepper" id="procSteps" style="display:none"></div><div class="state idle" id="processState"><div class="spinner"></div><div><div class="state-title" id="processTitle">Idle</div><div class="state-sub" id="processSubtitle">Tidak ada proses aktif.</div></div></div><div class="log" id="logBox"><div class="empty">Tidak ada proses aktif.</div></div><div class="result" id="result"></div></div></section>
             </div>
-          </section>
+          </div>
+
+          <!-- DOWNLOAD & CONVERT (link) -->
+          <section id="downloadPanel" class="panel"><div class="grid"><div class="stack" id="leftHostDownload"></div><aside class="right-mini" id="sideHostDownload"></aside></div></section>
+
+          <!-- UPLOAD AUDIO (file) -->
+          <section id="convertPanel" class="panel"><div class="grid"><div class="stack" id="leftHostConvert"></div><aside class="right-mini" id="sideHostConvert"></aside></div></section>
+
+          <!-- UPLOAD TO ROBLOX -->
+          <section id="robloxPanel" class="panel"><div class="grid"><div class="stack" id="leftHostRoblox">
+            <section class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><div class="card-title">Upload ke Roblox</div><div class="card-desc">Pilih lagu hasil convert lalu upload via Open Cloud</div></div></div><span class="pill">Open Cloud</span></div><div class="card-body">
+              <div class="form-row"><label>Converted Song</label><select class="select" id="songSelect"><option value="">Belum ada lagu aktif</option></select><div class="small">Convert dulu di tab "Upload Audio" / "Download &amp; Convert", atau buka job dari History.</div></div>
+              <div class="form-row"><label>Akun Roblox</label><select class="select" id="accountSelect"></select></div>
+              <div class="form-row"><label>Target</label><select class="select" id="uploadTarget"><option value="user">User</option><option value="group">Group</option></select></div>
+              <div class="form-row"><label>Asset Name</label><input class="input" id="assetNameInput" placeholder="Auto dari judul"></div>
+              <div class="form-row"><label>Description</label><textarea class="textarea" id="assetDescription">Exclusive tracks powered by NEV.</textarea></div>
+              <div class="footer-row" style="margin-bottom:10px"><button class="btn ghost sm" onclick="openAccounts()">Kelola Akun</button></div>
+              <button class="btn primary full" id="uploadRobloxBtn" onclick="uploadToRoblox()" disabled>Upload ke Roblox</button>
+            </div></section>
+          </div><aside class="right-mini" id="sideHostRoblox"></aside></div></section>
 
           <!-- OUTPUT -->
           <section id="outputPanel" class="panel">
@@ -503,7 +524,9 @@ let mode='upload',activeJobId=null,jobPoller=null,activeJobData=null,historyData
 const $=id=>document.getElementById(id);
 const PAGES={
   dashboard:['Dashboard','Selamat datang kembali'],
-  converter:['Download & Convert','Convert audio lalu upload ke Roblox'],
+  download:['Download & Convert','Download dari YouTube/SoundCloud lalu convert'],
+  convert:['Upload Audio','Upload lagu yang sudah kamu punya lalu convert'],
+  roblox:['Upload to Roblox','Upload lagu hasil convert ke Roblox'],
   output:['Playable IDs','Asset ID hasil upload ke Roblox'],
   history:['History','Riwayat konversi & upload'],
   admin:['Admin','Kelola user & limit (server pusat)'],
@@ -523,7 +546,30 @@ function openPanel(panel){
   if(panel==='output'){loadSavedNotes();renderCurrentOutput();}
   if(panel==='admin')loadAdminUsers();
   if(panel==='settings'){loadAccounts();renderSettings();}
+  placeMovables(panel);
   const c=document.querySelector('.content'); if(c)c.scrollTop=0;
+}
+
+/* Move the shared convert form + process block into the active feature panel */
+function placeMovables(panel){
+  const card=$('convertCard'), side=$('sideBlock'), park=$('movables');
+  if(panel==='download'){ $('leftHostDownload').appendChild(card); $('sideHostDownload').appendChild(side); setConvertContext('download'); }
+  else if(panel==='convert'){ $('leftHostConvert').appendChild(card); $('sideHostConvert').appendChild(side); setConvertContext('convert'); }
+  else if(panel==='roblox'){ $('sideHostRoblox').appendChild(side); if(park)park.appendChild(card); }
+  else { if(park){park.appendChild(card);park.appendChild(side);} }
+}
+function setConvertContext(ctx){
+  if(ctx==='download'){
+    $('convertCardTitle').innerText='Download & Convert';
+    $('convertCardDesc').innerText='Download dari YouTube/SoundCloud lalu convert ke OGG';
+    $('convertBtn').innerText='Download & Convert';
+    setMode('link');
+  }else{
+    $('convertCardTitle').innerText='Upload Audio';
+    $('convertCardDesc').innerText='Upload file lagu yang sudah kamu punya lalu convert';
+    $('convertBtn').innerText='Convert Audio';
+    setMode('upload');
+  }
 }
 
 /* ripple */
@@ -567,18 +613,42 @@ async function pingNetwork(){
 }
 
 /* ===== Converter logic ===== */
-function setMode(m){mode=m;$('uploadBox').style.display=m==='upload'?'block':'none';$('linkBox').style.display=m==='link'?'block':'none';$('uploadModeBtn').classList.toggle('active',m==='upload');$('linkModeBtn').classList.toggle('active',m==='link');}
+function setMode(m){mode=m;const ub=$('uploadBox'),lb=$('linkBox');if(ub)ub.style.display=m==='upload'?'block':'none';if(lb)lb.style.display=m==='link'?'block':'none';}
 document.querySelectorAll('.preset button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.preset button').forEach(x=>x.classList.remove('active'));b.classList.add('active');const s=Number(b.dataset.speed);$('speedInput').value=s;$('speedText').innerText=s+'x';$('playbackText').innerText=(1/s).toFixed(2);});
 $('volumeSlider').oninput=e=>{$('volumeText').innerText=(Number(e.target.value)>0?'+':'')+e.target.value+'dB';};
 $('audioInput').onchange=()=>{if($('audioInput').files.length)$('fileName').innerText=$('audioInput').files[0].name;};
 ['dragenter','dragover'].forEach(e=>$('dropzone').addEventListener(e,x=>{x.preventDefault();$('dropzone').classList.add('drag');}));
 ['dragleave','drop'].forEach(e=>$('dropzone').addEventListener(e,x=>{x.preventDefault();$('dropzone').classList.remove('drag');}));
 $('dropzone').addEventListener('drop',e=>{if(e.dataTransfer.files.length){$('audioInput').files=e.dataTransfer.files;$('fileName').innerText=e.dataTransfer.files[0].name;}});
-$('convertForm').onsubmit=async e=>{e.preventDefault();$('convertBtn').disabled=true;$('convertBtn').innerText='Processing...';setProcess('Converting','Menyiapkan job...','active');renderedLogCount=0;$('logBox').innerHTML='<div class="log-line"><span class="log-time">'+new Date().toLocaleTimeString()+'</span>Initializing job...</div>';try{let res;if(mode==='upload'){res=await fetch('/api/jobs/upload',{method:'POST',body:new FormData($('convertForm'))});}else{res=await fetch('/api/jobs/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$('titleInput').value,url:$('urlInput').value,speed:$('speedInput').value,amplify:$('volumeSlider').value})});}const data=await res.json();if(!res.ok)throw new Error(data.error||'Gagal memulai job.');activeJobId=data.jobId;refreshMe();startPollingJob(activeJobId);}catch(err){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';setProcess('Failed',err.message,'error');renderedLogCount=0;$('logBox').innerHTML='<div class="log-line">'+escapeHtml(err.message)+'</div>';}};
+$('convertForm').onsubmit=async e=>{e.preventDefault();$('convertBtn').disabled=true;$('convertBtn').innerText='Processing...';setProcess('Converting','Menyiapkan job...','active');renderSteps(mode==='link'?['Download','Convert','Selesai']:['Upload','Convert','Selesai'],0,false);renderedLogCount=0;$('logBox').innerHTML='<div class="log-line"><span class="log-time">'+new Date().toLocaleTimeString()+'</span>Initializing job...</div>';try{let res;if(mode==='upload'){res=await fetch('/api/jobs/upload',{method:'POST',body:new FormData($('convertForm'))});}else{res=await fetch('/api/jobs/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$('titleInput').value,url:$('urlInput').value,speed:$('speedInput').value,amplify:$('volumeSlider').value})});}const data=await res.json();if(!res.ok)throw new Error(data.error||'Gagal memulai job.');activeJobId=data.jobId;refreshMe();startPollingJob(activeJobId);}catch(err){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';setProcess('Failed',err.message,'error');renderedLogCount=0;$('logBox').innerHTML='<div class="log-line">'+escapeHtml(err.message)+'</div>';}};
 function startPollingJob(id){if(jobPoller)clearInterval(jobPoller);renderedLogCount=0;pollJob(id);jobPoller=setInterval(()=>pollJob(id),1500);}
 async function pollJob(id){const res=await fetch('/api/jobs/'+id);const job=await res.json();if(!res.ok)return;activeJobData=job;renderLogs(job.logs||[]);renderResult(job);renderCurrentOutput();updateProcess(job);await loadHistory(false);updateSongSelect();if(job.status==='done'&&!job.filesExpired)$('uploadRobloxBtn').disabled=false;if((job.status==='done'||job.status==='failed')&&job.robloxStatus!=='processing'){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';$('uploadRobloxBtn').innerText='Upload ke Roblox';clearInterval(jobPoller);jobPoller=null;loadSavedNotes();}}
+function renderSteps(labels,curr,allDone){
+  const el=$('procSteps'); if(!el)return; el.style.display='flex';
+  let html='';
+  labels.forEach((l,i)=>{
+    if(i>0){let b='step-bar';if(allDone||i<curr)b+=' fill';else if(i===curr)b+=' flow';html+=`<div class="${b}"></div>`;}
+    let s='step';let inner=i+1;
+    if(allDone||i<curr){s+=' done';inner='✓';}else if(i===curr)s+=' active';
+    html+=`<div class="${s}"><div class="dot">${inner}</div><div class="lbl">${escapeHtml(l)}</div></div>`;
+  });
+  el.innerHTML=html;
+}
+function hideSteps(){const el=$('procSteps');if(el){el.style.display='none';el.innerHTML='';}}
+function convSteps(j){return (j&&j.sourceType==='link')?['Download','Convert','Selesai']:['Upload','Convert','Selesai'];}
 function setProcess(t,s,state){$('processTitle').innerText=t;$('processSubtitle').innerText=s;if(state){const el=$('processState');el.classList.remove('idle','active','done','error');el.classList.add(state);}}
-function updateProcess(j){if(j.status==='processing')return setProcess('Converting','Konversi audio berjalan...','active');if(j.status==='failed')return setProcess('Failed','Cek process log.','error');if(j.robloxStatus==='processing')return setProcess('Uploading','Mengirim ke Roblox...','active');if(j.robloxStatus==='checking'){const n=j.songNotes||[],a=n.filter(x=>x.status==='available').length,c=n.filter(x=>x.status==='checking').length,f=n.filter(x=>x.status==='failed').length;return setProcess('Upload selesai',`Cek playable di Playable IDs: ${a} ok · ${c} cek · ${f} gagal`,c>0?'active':'done');}if(j.status==='done')return setProcess('Ready','Konversi selesai. Siap upload.','done');}
+function updateProcess(j){
+  if(j.status==='queued'||j.status==='processing'){
+    const labels=convSteps(j);let curr=0;
+    if(j.status==='processing'){const dl=(j.logs||[]).some(l=>/download/i.test(l.message)&&/(complete|selesai|done)/i.test(l.message));curr=(j.sourceType==='link'&&!dl)?0:1;}
+    renderSteps(labels,curr,false);
+    return setProcess('Converting',j.sourceType==='link'?'Download & convert berjalan...':'Konversi audio berjalan...','active');
+  }
+  if(j.status==='failed'){renderSteps(convSteps(j),1,false);const el=$('procSteps');const act=el&&el.querySelector('.step.active');if(act)act.classList.add('err');return setProcess('Failed','Cek process log.','error');}
+  if(j.robloxStatus==='processing'){renderSteps(['Upload','Moderasi','Selesai'],0,false);return setProcess('Uploading','Mengirim ke Roblox...','active');}
+  if(j.robloxStatus==='checking'){const n=j.songNotes||[],a=n.filter(x=>x.status==='available').length,c=n.filter(x=>x.status==='checking').length,f=n.filter(x=>x.status==='failed').length;renderSteps(['Upload','Moderasi','Selesai'],c>0?1:2,c===0);return setProcess('Upload selesai',`${a} ok · ${c} cek · ${f} gagal`,c>0?'active':'done');}
+  if(j.status==='done'){if(j.robloxStatus&&j.robloxStatus!=='not_started'){renderSteps(['Upload','Moderasi','Selesai'],2,true);}else{renderSteps(convSteps(j),2,true);}return setProcess('Ready','Konversi selesai. Siap upload.','done');}
+}
 let renderedLogCount=0;
 function renderLogs(logs){const box=$('logBox');if(!logs||!logs.length){if(renderedLogCount!==0){box.innerHTML='<div class="empty">No logs.</div>';renderedLogCount=0;}return;}if(logs.length<renderedLogCount){box.innerHTML='';renderedLogCount=0;}if(renderedLogCount===0)box.innerHTML='';const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<40;const frag=document.createDocumentFragment();for(let i=renderedLogCount;i<logs.length;i++){const l=logs[i];const line=document.createElement('div');line.className='log-line';line.innerHTML=`<span class="log-time">${new Date(l.time).toLocaleTimeString()}</span>${escapeHtml(l.message)}`;frag.appendChild(line);}box.appendChild(frag);renderedLogCount=logs.length;if(atBottom)box.scrollTop=box.scrollHeight;}
 function renderResult(j){if(j.status==='failed'){$('result').style.display='block';$('result').style.borderColor='rgba(251,113,133,.3)';$('result').style.background='rgba(251,113,133,.08)';$('result').style.color='#fecaca';$('result').innerHTML='<b>Konversi gagal.</b><br>'+escapeHtml(j.error||'');return;}if(j.status!=='done')return;const links=(j.outputs||[]).map(o=>`<a class="download" href="${o.downloadUrl}" download>${escapeHtml(o.displayName)}</a>`).join('');$('result').style.display='block';$('result').innerHTML=`<b>Konversi selesai.</b><br>${escapeHtml(j.title)} · ${j.originalDurationText} → ${j.processedDurationText}<br>Recommended PlaybackSpeed: ${j.playbackSpeed}<br>${links||'File expired.'}`;}
@@ -592,7 +662,7 @@ async function loadHistory(render=true){const r=await fetch('/api/history');hist
 function updateSongSelect(){const active=activeJobData&&activeJobData.status==='done'&&!activeJobData.filesExpired&&activeJobData.outputs&&activeJobData.outputs.length?activeJobData:null;if(active){$('songSelect').innerHTML=`<option value="${escAttr(active.id)}">${escapeHtml(active.title||'Untitled')}</option>`;$('songSelect').value=active.id;if(!$('assetNameInput').value||$('assetNameInput').dataset.auto==='1'){$('assetNameInput').value=active.title||'';$('assetNameInput').dataset.auto='1';}}else{$('songSelect').innerHTML='<option value="">Belum ada lagu aktif</option>';}}
 function getSelectedJobTitle(){return activeJobData?.title||'Roblox Audio';}
 function renderHistoryRows(){if(!historyData.length){$('historyRows').innerHTML='<tr><td colspan="6"><div class="empty">Belum ada history.</div></td></tr>';return;}$('historyRows').innerHTML=historyData.map(j=>`<tr><td><b>${escapeHtml(j.title||'Untitled')}</b><div class="item-meta">${escapeHtml((j.outputs&&j.outputs[0]?.displayName)||'No output')}</div></td><td><span class="status ${j.filesExpired?'expired':j.status}">${j.filesExpired?'expired':j.status}</span></td><td><span class="status ${j.robloxStatus||'not_started'}">${j.robloxStatus||'not requested'}</span></td><td>OGG</td><td>${new Date(j.createdAt).toLocaleString()}</td><td><button class="mini" onclick="openJob('${escAttr(j.id)}')">Detail</button></td></tr>`).join('');}
-function openJob(id){activeJobId=id;$('assetNameInput').value='';$('assetNameInput').dataset.auto='1';openPanel('converter');startPollingJob(id);}
+function openJob(id){activeJobId=id;$('assetNameInput').value='';$('assetNameInput').dataset.auto='1';openPanel('convert');startPollingJob(id);}
 async function loadSavedNotes(){const r=await fetch('/api/notes');savedNotes=await r.json();$('savedOutputBox').innerHTML=savedNotes.length?savedNotes.map(n=>`<div class="item"><div class="item-top"><div><div class="item-title">${escapeHtml(n.title||'Audio')} - Part ${escapeHtml(n.part||1)}</div><div class="item-meta">Asset ID: <b>${escapeHtml(n.assetId)}</b><br>PlaybackSpeed: ${escapeHtml(n.playbackSpeed||'-')} · Akun: ${escapeHtml(n.accountName||'-')}</div></div><span class="status available">Playable</span></div><div class="actions"><button class="mini" onclick="copyText('${escAttr(n.assetId)}')">Copy ID</button><button class="mini" onclick="deleteNote('${escAttr(n.id)}')">Hapus</button></div></div>`).join(''):'<div class="empty">Belum ada playable ID.</div>';}
 async function deleteNote(id){if(!confirm('Hapus output ini?'))return;await fetch('/api/notes/'+encodeURIComponent(id),{method:'DELETE'});loadSavedNotes();}
 function exportOutputTxt(){const text=savedNotes.length?savedNotes.map(n=>`${n.title||'Audio'} - Part ${n.part||1} - ${n.assetId} - Playable`).join('\n'):'No saved playable IDs.';const b=new Blob([text],{type:'text/plain'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='nev-output.txt';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u);}
