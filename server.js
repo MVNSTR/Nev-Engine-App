@@ -517,6 +517,87 @@ app.post('/api/notes/:jobId/:part/mark-playable', requireAuth, (req,res)=>{ cons
 app.post('/api/notes/:jobId/:part/mark-failed', requireAuth, (req,res)=>{ const job=getJob(req.user.id,req.params.jobId); if(!job) return res.status(404).json({error:'Job not found'}); const notes=(job.songNotes||[]).map(n=>{ if(Number(n.part)===Number(req.params.part)){ n.status='failed'; n.reason=String(req.body.reason||'Marked failed manually'); } return n; }); updateJob(req.user.id,job.id,{songNotes:notes}); res.json(getJob(req.user.id,job.id)); });
 app.post('/api/jobs/:id/recheck-roblox', requireAuth, async (req,res)=> res.json(await recheckJob(req.user.id,req.params.id,true)));
 
+// ===== Asset Monitor (view / delete-archive / grant permission to a universe) =====
+function resolveAccount(discordId, accountId){
+  const accounts=getAccounts(discordId);
+  let acc = accountId ? accounts.find(a=>a.id===accountId) : null;
+  if(!acc) acc = accounts.find(a=>a.isDefault) || accounts[0];
+  if(!acc) throw new Error('Belum ada akun Roblox dengan API key.');
+  const key=dec(acc.apiKeyEnc||acc.apiKey||'');
+  if(!key) throw new Error('API key akun ini kosong.');
+  return {acc,key};
+}
+async function rbxJson(url, key, method='GET', body){
+  const headers={'x-api-key':key};
+  if(body){ headers['Content-Type']='application/json'; }
+  const r=await fetch(url,{method,headers,body:body?JSON.stringify(body):undefined});
+  const t=await r.text(); let j={}; try{ j=JSON.parse(t); }catch{ j={raw:t}; }
+  return {ok:r.ok,status:r.status,json:j,text:t};
+}
+function rbxErr(r,fallback){ const j=r.json||{}; return (j.error&&(j.error.message||j.error))||j.message||(typeof j.raw==='string'&&j.raw)||`${fallback} (HTTP ${r.status})`; }
+
+// Aggregate published assets the app knows about (from history + saved notes).
+app.get('/api/assets', requireAuth, (req,res)=>{
+  const seen=new Set(); const out=[];
+  for(const job of getHistory(req.user.id)){
+    for(const n of (job.songNotes||[])){
+      if(!n.assetId) continue; const id=String(n.assetId); if(seen.has(id)) continue; seen.add(id);
+      out.push({assetId:id,title:job.title,name:n.name||job.title,part:n.part,jobId:job.id,accountId:job.robloxAccountId||'',accountLabel:job.robloxAccountLabel||'',status:n.status||'available',createdAt:n.availableAt||job.createdAt});
+    }
+  }
+  for(const n of getNotes(req.user.id)){
+    if(!n.assetId) continue; const id=String(n.assetId); if(seen.has(id)) continue; seen.add(id);
+    out.push({assetId:id,title:n.title,name:n.name||n.title,part:n.part,jobId:n.jobId||'',accountId:n.accountId||'',accountLabel:n.accountName||'',status:'available',createdAt:n.availableAt||n.createdAt});
+  }
+  out.sort((a,b)=> new Date(b.createdAt||0)-new Date(a.createdAt||0));
+  res.json(out);
+});
+
+// Live status of one asset (moderation + playable).
+app.post('/api/assets/:assetId/refresh', requireAuth, async (req,res)=>{
+  try{
+    const {acc,key}=resolveAccount(req.user.id,req.body.accountId);
+    const info=await rbxJson(`https://apis.roblox.com/assets/v1/assets/${encodeURIComponent(req.params.assetId)}`,key);
+    let playable=null; try{ const p=await checkPlayable(acc,req.params.assetId); playable=p.playable; }catch{}
+    res.json({assetId:req.params.assetId, ok:info.ok, displayName:info.json?.displayName||null, description:info.json?.description||null, moderationState:info.json?.moderationResult?.moderationState||null, playable, error: info.ok?null:rbxErr(info,'Gagal ambil info asset')});
+  }catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Archive (=delete from website/experiences, restorable) and restore.
+app.post('/api/assets/:assetId/archive', requireAuth, async (req,res)=>{
+  try{
+    const {key}=resolveAccount(req.user.id,req.body.accountId);
+    const r=await rbxJson(`https://apis.roblox.com/assets/v1/assets/${encodeURIComponent(req.params.assetId)}:archive`,key,'POST');
+    if(!r.ok) return res.status(r.status).json({error:rbxErr(r,'Archive gagal')});
+    // reflect deletion locally: drop saved playable note for this asset
+    saveNotes(req.user.id, getNotes(req.user.id).filter(n=>String(n.assetId)!==String(req.params.assetId)));
+    res.json({ok:true,asset:r.json});
+  }catch(e){ res.status(400).json({error:e.message}); }
+});
+app.post('/api/assets/:assetId/restore', requireAuth, async (req,res)=>{
+  try{
+    const {key}=resolveAccount(req.user.id,req.body.accountId);
+    const r=await rbxJson(`https://apis.roblox.com/assets/v1/assets/${encodeURIComponent(req.params.assetId)}:restore`,key,'POST');
+    if(!r.ok) return res.status(r.status).json({error:rbxErr(r,'Restore gagal')});
+    res.json({ok:true,asset:r.json});
+  }catch(e){ res.status(400).json({error:e.message}); }
+});
+
+// Grant an experience/universe permission to use this audio asset (collaboration).
+app.post('/api/assets/:assetId/grant', requireAuth, async (req,res)=>{
+  try{
+    const {key}=resolveAccount(req.user.id,req.body.accountId);
+    const universeId=String(req.body.universeId||'').trim();
+    if(!/^\d+$/.test(universeId)) return res.status(400).json({error:'Universe ID harus angka.'});
+    const body={requests:[{assetId:Number(req.params.assetId),universeId:Number(universeId)}]};
+    const r=await rbxJson('https://apis.roblox.com/asset-permissions-api/v1/assets/permissions',key,'PATCH',body);
+    if(!r.ok) return res.status(r.status).json({error:rbxErr(r,'Grant gagal')+' — pastikan API key punya scope asset-permissions:write.'});
+    const errs=(r.json&&r.json.errors)||[];
+    if(errs.length) return res.status(400).json({error:'Sebagian gagal: '+JSON.stringify(errs)});
+    res.json({ok:true,result:r.json});
+  }catch(e){ res.status(400).json({error:e.message}); }
+});
+
 app.post('/api/jobs/upload', requireAuth, upload.single('audio'), async (req,res)=>{ if(!req.file) return res.status(400).json({error:'Audio file is required'}); const lim=await consumeLimit(req,'convert'); if(lim) return res.status(429).json({error:lim}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||path.parse(req.file.originalname).name); const job=createJob(req.user.id,{title,sourceType:'upload',originalName:req.file.originalname,speed,amplify}); processJob(req.user.id,job.id,req.file.path,title,speed,amplify); res.json({jobId:job.id}); });
 app.post('/api/jobs/link', requireAuth, async (req,res)=>{ const url=String(req.body.url||'').trim(); if(!url||!isSupportedLink(url)) return res.status(400).json({error:'Use a YouTube or SoundCloud link'}); const lim=await consumeLimit(req,'convert'); if(lim) return res.status(429).json({error:lim}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||'Downloaded Audio'); const job=createJob(req.user.id,{title,sourceType:'link',sourceUrl:normalizeMediaUrl(url),originalName:'Downloaded Audio',speed,amplify}); processLinkJob(req.user.id,job.id,normalizeMediaUrl(url),title,speed,amplify); res.json({jobId:job.id}); });
 app.post('/api/jobs/:id/upload-roblox', requireAuth, async (req,res)=>{ const lim=await consumeLimit(req,'upload'); if(lim) return res.status(429).json({error:lim}); uploadJob(req.user.id,{jobId:req.params.id,accountId:req.body.accountId,target:req.body.target==='group'?'group':'user',assetName:req.body.assetName,description:req.body.description}).catch(e=>{ updateJob(req.user.id,req.params.id,{robloxStatus:'failed'}); addLog(req.user.id,req.params.id,`Roblox upload error: ${e.message}`); }); res.json({ok:true}); });

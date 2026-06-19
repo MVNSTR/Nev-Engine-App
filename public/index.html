@@ -402,7 +402,7 @@
           <div class="sb-group">Monitoring</div>
           <div class="nav-item" data-panel="analysis" onclick="openPanel('analysis')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg><span>Music Analysis</span><span class="lock">🔒</span></div>
           <div class="nav-item" data-panel="scheduled" onclick="openPanel('scheduled')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Scheduled Uploads</span><span class="lock">🔒</span></div>
-          <div class="nav-item" data-panel="monitor" onclick="openPanel('monitor')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Asset Monitor</span><span class="lock">🔒</span></div>
+          <div class="nav-item" data-panel="monitor" onclick="openPanel('monitor')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Asset Monitor</span></div>
 
           <div class="sb-group">System</div>
           <div class="nav-item" id="adminNavItem" data-panel="admin" onclick="openPanel('admin')" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg><span>Admin</span></div>
@@ -507,7 +507,14 @@
           <section id="bulkPanel" class="panel"><div class="card"><div class="card-body"><div class="locked"><div class="locked-ic">📦</div><h2>Bulk Operations</h2><p>Upload &amp; proses banyak file sekaligus. Coming soon.</p></div></div></div></section>
           <section id="analysisPanel" class="panel"><div class="card"><div class="card-body"><div class="locked"><div class="locked-ic">📊</div><h2>Music Analysis</h2><p>Analisa audio &amp; rekomendasi setting. Coming soon.</p></div></div></div></section>
           <section id="scheduledPanel" class="panel"><div class="card"><div class="card-body"><div class="locked"><div class="locked-ic">⏰</div><h2>Scheduled Uploads</h2><p>Jadwalkan upload di waktu optimal. Coming soon.</p></div></div></div></section>
-          <section id="monitorPanel" class="panel"><div class="card"><div class="card-body"><div class="locked"><div class="locked-ic">📡</div><h2>Asset Monitor</h2><p>Pantau status takedown asset real-time. Coming soon.</p></div></div></div></section>
+          <section id="monitorPanel" class="panel">
+            <div class="stat-grid">
+              <div class="stat"><div class="stat-glow" style="background:var(--accent)"></div><div class="stat-ic" style="background:var(--accent-soft);color:var(--accent2);font-size:18px">📦</div><div class="stat-label">Total Asset</div><div class="stat-value" id="mTotal">0</div></div>
+              <div class="stat"><div class="stat-glow" style="background:var(--green)"></div><div class="stat-ic" style="background:var(--green-soft);color:var(--green);font-size:18px">🟢</div><div class="stat-label">Playable</div><div class="stat-value" id="mPlayable">0</div></div>
+              <div class="stat"><div class="stat-glow" style="background:var(--red)"></div><div class="stat-ic" style="background:var(--red-soft);color:var(--red);font-size:18px">🔴</div><div class="stat-label">Gagal / Takedown</div><div class="stat-value" id="mBad">0</div></div>
+            </div>
+            <div class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><div class="card-title">Published Sounds</div><div class="card-desc">Sound yang sudah di-upload ke Roblox lewat app ini · kelola kolaborasi &amp; hapus</div></div></div><div class="footer-row" style="align-items:center"><select class="select" id="monitorAccount" style="width:auto;min-width:150px;height:34px"></select><button class="btn ghost sm" onclick="loadAssetMonitor()">Refresh</button></div></div><div class="card-body"><div id="assetMonitorList" class="list"><div class="empty">Memuat…</div></div></div></div>
+          </section>
 
         </div></div>
       </main>
@@ -535,7 +542,7 @@ const PAGES={
   bulk:['Bulk Operations','Coming soon'],
   analysis:['Music Analysis','Coming soon'],
   scheduled:['Scheduled Uploads','Coming soon'],
-  monitor:['Asset Monitor','Coming soon']
+  monitor:['Asset Monitor','Lihat, kelola izin, & hapus asset Roblox kamu']
 };
 function openPanel(panel){
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.panel===panel));
@@ -545,6 +552,7 @@ function openPanel(panel){
   if(panel==='history')loadHistory();
   if(panel==='output'){loadSavedNotes();renderCurrentOutput();}
   if(panel==='admin')loadAdminUsers();
+  if(panel==='monitor')loadAssetMonitor();
   if(panel==='settings'){loadAccounts();renderSettings();}
   placeMovables(panel);
   const c=document.querySelector('.content'); if(c)c.scrollTop=0;
@@ -689,6 +697,54 @@ async function logout(){await fetch('/api/logout',{method:'POST'});location.href
 /* ===== Admin ===== */
 async function loadAdminUsers(){if(!currentUser?.isAdmin)return;const r=await fetch('/api/admin/users');const users=await r.json();if(!r.ok){$('adminUsersBox').innerHTML='<div class="empty">Tidak bisa memuat user.</div>';return;}$('adminUsersBox').innerHTML=users.length?users.map(u=>`<div class="admin-row"><div><b>${escapeHtml(u.globalName||u.username)}</b><div class="item-meta">${u.id}<br>${u.isOnline?'<span class="online-dot"></span>Online':'<span class="offline-dot"></span>Offline'}</div></div><div><span class="status ${u.isBlocked?'failed':'available'}">${u.isBlocked?'blocked':'active'}</span></div><div class="item-meta">C:${u.usageToday?.convert||0}</div><div class="item-meta">U:${u.usageToday?.upload||0}</div><input class="input" id="conv_${u.id}" type="number" value="${u.dailyConvertLimit||0}" min="-1"><input class="input" id="upl_${u.id}" type="number" value="${u.dailyUploadLimit||0}" min="-1"><div class="actions" style="grid-column:1/-1"><button class="mini" onclick="saveAdminUser('${escAttr(u.id)}',undefined)">Simpan Limit</button><button class="mini" onclick="saveAdminUser('${escAttr(u.id)}',${u.isBlocked?'false':'true'})">${u.isBlocked?'Unblock':'Block'}</button></div></div>`).join(''):'<div class="empty">Belum ada user.</div>';}
 async function saveAdminUser(id,blocked){const body={dailyConvertLimit:Number($('conv_'+id).value),dailyUploadLimit:Number($('upl_'+id).value)};if(blocked!==undefined)body.isBlocked=blocked==='true'||blocked===true;const r=await fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok){const d=await r.json().catch(()=>({}));return alert(d.error||'Gagal update user.');}loadAdminUsers();}
+
+/* ===== Asset Monitor ===== */
+let assetMonitorData=[];
+function monitorAcc(fallback){const sel=$('monitorAccount');return fallback||(sel&&sel.value)||'';}
+async function loadAssetMonitor(){
+  if(!accounts.length){try{await loadAccounts();}catch{}}
+  const sel=$('monitorAccount');
+  if(sel)sel.innerHTML=accounts.length?accounts.map(a=>`<option value="${escAttr(a.id)}">${escapeHtml(a.label)}${a.isDefault?' — default':''}</option>`).join(''):'<option value="">No account</option>';
+  const box=$('assetMonitorList');if(box)box.innerHTML='<div class="empty">Memuat…</div>';
+  let data=[];try{const r=await fetch('/api/assets');data=await r.json();}catch{data=[];}
+  assetMonitorData=Array.isArray(data)?data:[];
+  const total=assetMonitorData.length,playable=assetMonitorData.filter(a=>a.status==='available').length,bad=assetMonitorData.filter(a=>a.status==='failed').length;
+  if($('mTotal'))animateCount($('mTotal'),total);
+  if($('mPlayable'))animateCount($('mPlayable'),playable);
+  if($('mBad'))animateCount($('mBad'),bad);
+  if(box)box.innerHTML=total?assetMonitorData.map(renderAssetRow).join(''):'<div class="empty">Belum ada sound yang di-upload ke Roblox lewat app ini.</div>';
+}
+function renderAssetRow(a){
+  const st=a.status||'available';
+  const lib=`https://create.roblox.com/store/asset/${escAttr(a.assetId)}`;
+  return `<div class="item" id="asset_${escAttr(a.assetId)}"><div class="item-top"><div style="min-width:0"><div class="item-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name||a.title||'Audio')}</div><div class="item-meta">Asset ID: <b>${escapeHtml(a.assetId)}</b>${a.accountLabel?' · Akun: '+escapeHtml(a.accountLabel):''}</div><div class="small asset-state" id="state_${escAttr(a.assetId)}" style="margin-top:4px"></div></div><span class="status ${st}">${escapeHtml(st)}</span></div><div class="actions"><button class="mini" onclick="copyText('${escAttr(a.assetId)}')">Copy ID</button><a class="mini" href="${lib}" target="_blank" rel="noopener">Buka di Roblox</a><button class="mini" onclick="refreshAsset('${escAttr(a.assetId)}','${escAttr(a.accountId||'')}')">Cek Status</button><button class="mini" onclick="grantPermission('${escAttr(a.assetId)}','${escAttr(a.accountId||'')}')">Beri Izin Universe</button><button class="mini" style="border-color:rgba(251,113,133,.4);color:#fecaca" onclick="archiveAsset('${escAttr(a.assetId)}','${escAttr(a.accountId||'')}')">Hapus</button></div></div>`;
+}
+async function refreshAsset(assetId,accId){
+  const el=$('state_'+assetId);if(el)el.innerHTML='Mengecek…';
+  try{
+    const r=await fetch(`/api/assets/${assetId}/refresh`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:monitorAcc(accId)})});
+    const d=await r.json();
+    if(!r.ok){if(el)el.innerHTML='<span style="color:#fecaca">'+escapeHtml(d.error||'Gagal')+'</span>';return;}
+    const play=d.playable===true?'🟢 Playable':d.playable===false?'🔴 Belum playable':'';
+    const mod=d.moderationState?(' · Moderasi: '+escapeHtml(d.moderationState)):'';
+    if(el)el.innerHTML=escapeHtml(d.displayName||'')+(play?' · '+play:'')+mod;
+  }catch{if(el)el.innerHTML='<span style="color:#fecaca">Error koneksi</span>';}
+}
+async function grantPermission(assetId,accId){
+  const universeId=prompt('Masukkan Universe ID experience yang boleh memakai sound ini:');
+  if(!universeId)return;
+  const r=await fetch(`/api/assets/${assetId}/grant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:monitorAcc(accId),universeId:universeId.trim()})});
+  const d=await r.json();
+  if(!r.ok)return alert(d.error||'Grant gagal.');
+  alert('Izin diberikan. Universe '+universeId+' sekarang bisa memakai asset '+assetId+'.');
+}
+async function archiveAsset(assetId,accId){
+  if(!confirm('Hapus (archive) asset '+assetId+' dari Roblox? Masih bisa di-restore dari Creator Hub.'))return;
+  const r=await fetch(`/api/assets/${assetId}/archive`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:monitorAcc(accId)})});
+  const d=await r.json();
+  if(!r.ok)return alert(d.error||'Archive gagal.');
+  loadAssetMonitor();loadSavedNotes();
+}
 
 /* ===== Login ===== */
 let loginPollTimer=null;
