@@ -1,0 +1,9 @@
+.git
+node_modules
+dist
+dist-app
+data
+uploads
+outputs
+test-*.js
+test-*.txt

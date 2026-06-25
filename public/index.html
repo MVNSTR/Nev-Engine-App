@@ -498,7 +498,28 @@
           <section id="settingsPanel" class="panel">
             <div class="grid2">
               <div class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div><div class="card-title">Akun Roblox</div><div class="card-desc">API key untuk upload (tersimpan terenkripsi & lokal)</div></div></div><button class="btn primary sm" onclick="openAccounts()">+ Tambah / Kelola</button></div><div class="card-body"><div class="list" id="settingsAccounts"><div class="empty">Belum ada akun.</div></div></div></div>
-              <div class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/></svg></div><div><div class="card-title">Aplikasi</div></div></div></div><div class="card-body" id="settingsInfo"></div></div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div class="card"><div class="card-head"><div class="ct"><div class="card-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6"/></svg></div><div><div class="card-title">Aplikasi</div></div></div></div><div class="card-body" id="settingsInfo"></div></div>
+                <div class="card">
+                  <div class="card-head">
+                    <div class="ct">
+                      <div class="card-ico">🍪</div>
+                      <div style="min-width:0">
+                        <div class="card-title">YouTube Cookies</div>
+                        <div class="card-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bypass limit/verifikasi download YouTube</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="cookiesStatus" style="margin-bottom:12px;font-size:13px">Memuat status...</div>
+                    <div style="display:flex;gap:8px">
+                      <button class="btn primary sm" onclick="$('cookieFileInput').click()">Upload Cookies</button>
+                      <button class="btn danger sm ghost" id="deleteCookiesBtn" onclick="deleteCookies()" style="display:none">Hapus</button>
+                    </div>
+                    <input type="file" id="cookieFileInput" accept=".txt" style="display:none" onchange="handleCookieUpload(event)">
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -608,6 +629,66 @@ function renderSettings(){
   $('settingsInfo').innerHTML=`<div class="row-file" style="margin-bottom:10px"><div class="file-ic">🌐</div><div style="flex:1"><div class="item-meta">Mode</div><div class="item-title">${appConfig.desktop?'Desktop (central auth)':'Web'}</div></div></div>
     <div class="row-file" style="margin-bottom:10px"><div class="file-ic">📡</div><div style="flex:1"><div class="item-meta">Server pusat</div><div class="item-title" id="setNet">—</div></div></div>
     <button class="btn ghost full" onclick="logout()" style="margin-top:6px">Logout</button>`;
+  updateCookiesUI();
+}
+
+async function updateCookiesUI(){
+  const el = $('cookiesStatus');
+  const delBtn = $('deleteCookiesBtn');
+  if(!el) return;
+  try {
+    const res = await fetch('/api/youtube-cookies');
+    if(!res.ok) throw new Error();
+    const data = await res.json();
+    if(data.active){
+      el.innerHTML = '<span style="color:#10b981;font-weight:700">🟢 Aktif (Cookies per-user aktif)</span>';
+      delBtn.style.display = 'inline-block';
+    } else if(data.globalActive){
+      el.innerHTML = '<span style="color:#f59e0b;font-weight:700">🟡 Aktif (Menggunakan cookies global)</span>';
+      delBtn.style.display = 'none';
+    } else {
+      el.innerHTML = '<span style="color:#ef4444;font-weight:700">🔴 Tidak Aktif (Tanpa cookies)</span>';
+      delBtn.style.display = 'none';
+    }
+  } catch(e) {
+    el.innerHTML = '<span style="color:#ef4444">Gagal memuat status cookies.</span>';
+    delBtn.style.display = 'none';
+  }
+}
+
+async function handleCookieUpload(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const content = e.target.result;
+    try {
+      const res = await fetch('/api/youtube-cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies: content })
+      });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Upload gagal.');
+      alert('Cookies berhasil di-upload!');
+      updateCookiesUI();
+    } catch(err) {
+      alert(err.message || 'Gagal mengupload cookies.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function deleteCookies(){
+  if(!confirm('Apakah Anda yakin ingin menghapus cookies Anda?')) return;
+  try {
+    const res = await fetch('/api/youtube-cookies', { method: 'DELETE' });
+    if(!res.ok) throw new Error();
+    alert('Cookies berhasil dihapus!');
+    updateCookiesUI();
+  } catch(e) {
+    alert('Gagal menghapus cookies.');
+  }
 }
 
 /* ===== Network ===== */

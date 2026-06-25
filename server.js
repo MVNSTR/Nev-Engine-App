@@ -351,10 +351,13 @@ async function getDuration(filePath){ const {stdout}=await run(BIN.ffprobe,['-v'
 function speedFilter(speed,amp){ return ['aresample=48000',`asetrate=${Math.round(48000*speed)}`,'aresample=48000',`volume=${amp}dB`].join(','); }
 async function applyFadeToFile({inputPath,outputPath,filter}){ const tmp=`${outputPath}.fade.tmp.ogg`; if(fs.existsSync(tmp)) fs.unlinkSync(tmp); await run(BIN.ffmpeg,['-y','-i',inputPath,'-af',filter,'-vn','-c:a','libvorbis','-q:a','5',tmp]); if(fs.existsSync(outputPath)) fs.unlinkSync(outputPath); fs.renameSync(tmp,outputPath); }
 async function applyEdgeFades(discordId, jobId, outputs){ if(!outputs.length) return; const sorted=outputs.slice().sort((a,b)=>a.part-b.part); if(sorted.length===1){ const p=path.join(OUTPUT_DIR,sorted[0].filename); const d=await getDuration(p); await applyFadeToFile({inputPath:p,outputPath:p,filter:`afade=t=in:st=0:d=${FADE_IN_SECONDS},afade=t=out:st=${Math.max(0,d-FADE_OUT_SECONDS)}:d=${FADE_OUT_SECONDS}`}); addLog(discordId,jobId,'Fade in/out applied.'); return;} const first=path.join(OUTPUT_DIR,sorted[0].filename); await applyFadeToFile({inputPath:first,outputPath:first,filter:`afade=t=in:st=0:d=${FADE_IN_SECONDS}`}); const last=path.join(OUTPUT_DIR,sorted[sorted.length-1].filename); const d=await getDuration(last); await applyFadeToFile({inputPath:last,outputPath:last,filter:`afade=t=out:st=${Math.max(0,d-FADE_OUT_SECONDS)}:d=${FADE_OUT_SECONDS}`}); addLog(discordId,jobId,'Edge fades applied.'); }
-async function downloadAudio(url, jobId) {
+async function downloadAudio(discordId, url, jobId) {
   const normalized = normalizeMediaUrl(url);
   const out = path.join(UPLOAD_DIR, `${jobId}_source.%(ext)s`);
-  const hasCookies = fs.existsSync(YT_COOKIES_FILE);
+  const userCookiesPath = userFile(discordId, 'youtube-cookies.txt');
+  const hasUserCookies = fs.existsSync(userCookiesPath);
+  const hasGlobalCookies = fs.existsSync(YT_COOKIES_FILE);
+  const cookiesPath = hasUserCookies ? userCookiesPath : (hasGlobalCookies ? YT_COOKIES_FILE : null);
 
   const args = [
     '--no-playlist',
@@ -388,8 +391,8 @@ async function downloadAudio(url, jobId) {
     out
   ];
 
-  if (hasCookies) {
-    args.unshift('--cookies', YT_COOKIES_FILE);
+  if (cookiesPath) {
+    args.unshift('--cookies', cookiesPath);
   }
 
   args.push(normalized);
@@ -434,7 +437,7 @@ async function convertAudio(discordId, jobId, inputPath, title, speed, amplify){
  await applyEdgeFades(discordId,jobId,outputs); return {originalDuration,processedDuration,originalDurationText:formatDuration(originalDuration),processedDurationText:formatDuration(processedDuration),outputs,split,playbackSpeed:1/speed}; }
 function createJob(discordId,{title,sourceType,sourceUrl,originalName,speed,amplify}){ const id=uuidv4(); const now=new Date(); const job={id,title,sourceType,sourceUrl:sourceUrl||null,originalName:originalName||title,speedUp:Number(speed.toFixed(3)),playbackSpeed:Number((1/speed).toFixed(3)),amplifyDb:Number(amplify.toFixed(1)),status:'queued',robloxStatus:'not_started',outputs:[],songNotes:[],logs:[{time:now.toISOString(),message:'Job created.'}],filesExpired:false,expiresAt:new Date(now.getTime()+FILE_TTL_MS).toISOString(),createdAt:now.toISOString(),updatedAt:now.toISOString()}; const h=getHistory(discordId); h.unshift(job); saveHistory(discordId,h); return job; }
 async function processJob(discordId, jobId, inputPath, title, speed, amplify){ try{ updateJob(discordId,jobId,{status:'processing'}); addLog(discordId,jobId,'Starting conversion...'); const result=await convertAudio(discordId,jobId,inputPath,title,speed,amplify); updateJob(discordId,jobId,{...result, originalDuration:Number(result.originalDuration.toFixed(2)), processedDuration:Number(result.processedDuration.toFixed(2)), playbackSpeed:Number(result.playbackSpeed.toFixed(3)), status:'done'}); addLog(discordId,jobId,`Conversion completed. Files and job auto-delete in ${FILE_TTL_MS/3600000} hour(s).`); }catch(e){ updateJob(discordId,jobId,{status:'failed',error:e.stderr||e.message}); addLog(discordId,jobId,`Error: ${e.stderr||e.message}`); } finally { try{ if(inputPath&&fs.existsSync(inputPath)) fs.unlinkSync(inputPath); }catch{} } }
-async function processLinkJob(discordId, jobId, url, title, speed, amplify){ let input=null; try{ updateJob(discordId,jobId,{status:'processing'}); addLog(discordId,jobId,'Downloading audio from link...'); input=await downloadAudio(url,jobId); addLog(discordId,jobId,'Download completed.'); const result=await convertAudio(discordId,jobId,input,title,speed,amplify); updateJob(discordId,jobId,{...result, originalDuration:Number(result.originalDuration.toFixed(2)), processedDuration:Number(result.processedDuration.toFixed(2)), playbackSpeed:Number(result.playbackSpeed.toFixed(3)), status:'done'}); addLog(discordId,jobId,`Conversion completed. Files and job auto-delete in ${FILE_TTL_MS/3600000} hour(s).`); }catch(e){ updateJob(discordId,jobId,{status:'failed',error:e.stderr||e.message}); addLog(discordId,jobId,`Error: ${e.stderr||e.message}`); } finally { try{ if(input&&fs.existsSync(input)) fs.unlinkSync(input); }catch{} } }
+async function processLinkJob(discordId, jobId, url, title, speed, amplify){ let input=null; try{ updateJob(discordId,jobId,{status:'processing'}); addLog(discordId,jobId,'Downloading audio from link...'); input=await downloadAudio(discordId,url,jobId); addLog(discordId,jobId,'Download completed.'); const result=await convertAudio(discordId,jobId,input,title,speed,amplify); updateJob(discordId,jobId,{...result, originalDuration:Number(result.originalDuration.toFixed(2)), processedDuration:Number(result.processedDuration.toFixed(2)), playbackSpeed:Number(result.playbackSpeed.toFixed(3)), status:'done'}); addLog(discordId,jobId,`Conversion completed. Files and job auto-delete in ${FILE_TTL_MS/3600000} hour(s).`); }catch(e){ updateJob(discordId,jobId,{status:'failed',error:e.stderr||e.message}); addLog(discordId,jobId,`Error: ${e.stderr||e.message}`); } finally { try{ if(input&&fs.existsSync(input)) fs.unlinkSync(input); }catch{} } }
 function expireOldFiles(discordId){
   const h=getHistory(discordId);
   const now=Date.now();
@@ -476,7 +479,7 @@ function checkLimit(req,type){ if(isAdminId(req.user.id)) return null; const u=p
 function getCreator(account,target){ if(target==='group'){ if(!account.groupId) throw new Error('Group ID is not set for this account.'); return {groupId:String(account.groupId)}; } if(!account.userId) throw new Error('User ID is not set for this account.'); return {userId:String(account.userId)}; }
 function extractOperationId(p){ return p?String(p).replace(/^operations\//,''):null; }
 function extractAssetId(op){ const r=op.response||op.result||{}; return r.assetId || r.asset?.id || r.asset?.assetId || r.id || null; }
-async function uploadSingle({account,filePath,displayName,description,target}){ const apiKey=dec(account.apiKeyEnc||account.apiKey||''); if(!apiKey) throw new Error('API key missing.'); const file=fs.readFileSync(filePath); if(file.length>=20*1024*1024) throw new Error('File is bigger than 20MB.'); const d=await getDuration(filePath); if(d>=ROBLOX_LIMIT_SECONDS) throw new Error('File duration is longer than 7 minutes.'); const form=new FormData(); form.append('request',JSON.stringify({assetType:'Audio',displayName:sanitizeRobloxName(displayName),description:String(description||DEFAULT_DESCRIPTION).slice(0,1000),creationContext:{creator:getCreator(account,target)}})); form.append('fileContent',new Blob([file],{type:'audio/ogg'}),path.basename(filePath)); const cr=await fetch('https://apis.roblox.com/assets/v1/assets',{method:'POST',headers:{'x-api-key':apiKey},body:form}); const text=await cr.text(); let json={}; try{json=JSON.parse(text)}catch{json={raw:text}} if(!cr.ok) throw new Error(json.message||json.error||text||'Roblox upload failed'); const operationId=extractOperationId(json.path||json.name); if(!operationId) throw new Error('Missing operation id from Roblox.'); for(let i=0;i<80;i++){ await new Promise(r=>setTimeout(r,3000)); const or=await fetch(`https://apis.roblox.com/assets/v1/operations/${encodeURIComponent(operationId)}`,{headers:{'x-api-key':apiKey}}); const ot=await or.text(); let oj={}; try{oj=JSON.parse(ot)}catch{oj={raw:ot}} if(!or.ok) throw new Error(oj.message||oj.error||ot||'Operation check failed'); if(oj.done){ if(oj.error) throw new Error(oj.error.message||JSON.stringify(oj.error)); const assetId=extractAssetId(oj); if(!assetId) throw new Error('Upload done, but assetId missing.'); return {assetId:String(assetId),operationId}; } } throw new Error('Timeout waiting for Roblox operation.'); }
+async function uploadSingle({account,filePath,displayName,description,target}){ const apiKey=dec(account.apiKeyEnc||account.apiKey||''); if(!apiKey) throw new Error('API key missing.'); const file=fs.readFileSync(filePath); if(file.length>=20*1024*1024) throw new Error('File is bigger than 20MB.'); const d=await getDuration(filePath); if(d>=ROBLOX_LIMIT_SECONDS) throw new Error('File duration is longer than 7 minutes.'); const form=new FormData(); form.append('request',JSON.stringify({assetType:'Audio',displayName:sanitizeRobloxName(displayName),description:String(description||DEFAULT_DESCRIPTION).slice(0,1000),creationContext:{creator:getCreator(account,target)}})); form.append('fileContent',new Blob([file],{type:'audio/ogg'}),path.basename(filePath)); const cr=await fetch('https://apis.roblox.com/assets/v1/assets',{method:'POST',headers:{'x-api-key':apiKey},body:form}); const text=await cr.text(); let json={}; try{json=JSON.parse(text)}catch{json={raw:text}} if(!cr.ok) throw new Error(json.errors?.[0]?.message||json.message||json.error||text||'Roblox upload failed'); const operationId=extractOperationId(json.path||json.name); if(!operationId) throw new Error('Missing operation id from Roblox.'); for(let i=0;i<80;i++){ await new Promise(r=>setTimeout(r,3000)); const or=await fetch(`https://apis.roblox.com/assets/v1/operations/${encodeURIComponent(operationId)}`,{headers:{'x-api-key':apiKey}}); const ot=await or.text(); let oj={}; try{oj=JSON.parse(ot)}catch{oj={raw:ot}} if(!or.ok) throw new Error(oj.errors?.[0]?.message||oj.message||oj.error||ot||'Operation check failed'); if(oj.done){ if(oj.error) throw new Error(oj.error.message||JSON.stringify(oj.error)); const assetId=extractAssetId(oj); if(!assetId) throw new Error('Upload done, but assetId missing.'); return {assetId:String(assetId),operationId}; } } throw new Error('Timeout waiting for Roblox operation.'); }
 async function checkPlayable(account,assetId){ const key=dec(account.apiKeyEnc||account.apiKey||''); const res=await fetch(`https://apis.roblox.com/asset-delivery-api/v1/assetId/${encodeURIComponent(assetId)}`,{headers:{'x-api-key':key}}); const text=await res.text().catch(()=>''); if(res.ok) return {playable:true}; const low=String(text).toLowerCase(); if(['moderation','moderated','copyright','rejected','deleted','not approved','not allowed','policy'].some(x=>low.includes(x))) return {playable:false,failed:true,reason:text}; return {playable:false,failed:false,reason:text||`HTTP ${res.status}`}; }
 function savePlayableNote(discordId,job,note,description){ const notes=getNotes(discordId); const id=`${job.id}:${note.part}`; const idx=notes.findIndex(n=>n.id===id); const item={id,jobId:job.id,title:job.title,part:note.part,name:note.name,assetId:note.assetId,playbackSpeed:job.playbackSpeed,speedUp:job.speedUp,description:description||job.robloxDescription||DEFAULT_DESCRIPTION,status:'available',availableAt:note.availableAt||new Date().toISOString(),createdAt:note.createdAt||job.createdAt||new Date().toISOString()}; if(idx>=0) notes[idx]=item; else notes.unshift(item); saveNotes(discordId,notes); }
 async function recheckJob(discordId,jobId,force=false){ let job=getJob(discordId,jobId); if(!job) return null; const accounts=getAccounts(discordId); const account=accounts.find(a=>a.id===job.robloxAccountId); if(!account) return job; let changed=false; const notes=[]; for(const n of job.songNotes||[]){ const note={...n}; if(note.status!=='checking'||!note.pendingAssetId){ notes.push(note); continue; } const last=note.lastCheckedAt?new Date(note.lastCheckedAt).getTime():0; if(!force && Date.now()-last<ASSET_RECHECK_INTERVAL_MS){ notes.push(note); continue; } note.checkAttempts=(note.checkAttempts||0)+1; note.lastCheckedAt=new Date().toISOString(); try{ const r=await checkPlayable(account,note.pendingAssetId); if(r.playable){ note.status='available'; note.assetId=note.pendingAssetId; note.availableAt=new Date().toISOString(); note.reason=null; } else if(r.failed){ note.status='failed'; note.reason=r.reason||'Rejected by Roblox'; } else { note.reason='Waiting for Roblox moderation / availability.'; if(note.checkAttempts>=ASSET_RECHECK_MAX_ATTEMPTS){ note.status='pending'; note.reason='Still not confirmed. Use Mark Playable if it works in Roblox.'; } } }catch(e){ note.reason='Unable to check automatically.'; } changed=true; notes.push(note); }
@@ -516,6 +519,33 @@ app.delete('/api/notes/:id', requireAuth, (req,res)=>{ saveNotes(req.user.id,get
 app.post('/api/notes/:jobId/:part/mark-playable', requireAuth, (req,res)=>{ const job=getJob(req.user.id,req.params.jobId); if(!job) return res.status(404).json({error:'Job not found'}); const notes=(job.songNotes||[]).map(n=>{ if(Number(n.part)===Number(req.params.part)){ n.status='available'; n.assetId=n.assetId||n.pendingAssetId||String(req.body.assetId||''); n.availableAt=new Date().toISOString(); n.reason=null; savePlayableNote(req.user.id,job,n,job.robloxDescription); } return n; }); updateJob(req.user.id,job.id,{songNotes:notes,robloxStatus:notes.some(n=>n.status==='checking')?'checking':'available'}); res.json(getJob(req.user.id,job.id)); });
 app.post('/api/notes/:jobId/:part/mark-failed', requireAuth, (req,res)=>{ const job=getJob(req.user.id,req.params.jobId); if(!job) return res.status(404).json({error:'Job not found'}); const notes=(job.songNotes||[]).map(n=>{ if(Number(n.part)===Number(req.params.part)){ n.status='failed'; n.reason=String(req.body.reason||'Marked failed manually'); } return n; }); updateJob(req.user.id,job.id,{songNotes:notes}); res.json(getJob(req.user.id,job.id)); });
 app.post('/api/jobs/:id/recheck-roblox', requireAuth, async (req,res)=> res.json(await recheckJob(req.user.id,req.params.id,true)));
+
+app.get('/api/youtube-cookies', requireAuth, (req, res) => {
+  ensureUserFiles(req.user.id);
+  const userCookiesPath = userFile(req.user.id, 'youtube-cookies.txt');
+  res.json({
+    active: fs.existsSync(userCookiesPath),
+    globalActive: fs.existsSync(YT_COOKIES_FILE)
+  });
+});
+
+app.post('/api/youtube-cookies', requireAuth, (req, res) => {
+  ensureUserFiles(req.user.id);
+  const content = String(req.body.cookies || '').trim();
+  if (!content) return res.status(400).json({ error: 'Cookie content is empty' });
+  const userCookiesPath = userFile(req.user.id, 'youtube-cookies.txt');
+  fs.writeFileSync(userCookiesPath, content, 'utf8');
+  res.json({ ok: true });
+});
+
+app.delete('/api/youtube-cookies', requireAuth, (req, res) => {
+  ensureUserFiles(req.user.id);
+  const userCookiesPath = userFile(req.user.id, 'youtube-cookies.txt');
+  if (fs.existsSync(userCookiesPath)) {
+    fs.unlinkSync(userCookiesPath);
+  }
+  res.json({ ok: true });
+});
 
 // ===== Asset Monitor (view / delete-archive / grant permission to a universe) =====
 function resolveAccount(discordId, accountId){
