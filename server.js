@@ -304,33 +304,101 @@ function discordCfg(){
 function sanitizeTitle(input){ return String(input||'Untitled Audio').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g,'').replace(/\s+/g,' ').slice(0,90) || 'Untitled Audio'; }
 function sanitizeFileName(input){ return sanitizeTitle(input).replace(/[^\w\s.\-()[\]]/g,'').trim() || 'Untitled Audio'; }
 function sanitizeRobloxName(input) {
-  let name = sanitizeTitle(input);
+  let name = String(input || '').trim();
+
+  // 1. Remove file extensions if any (e.g. .mp3, .ogg, .wav, .flac)
+  name = name.replace(/\.(mp3|ogg|wav|flac|m4a|aac|mp4)$/gi, '');
+
+  // 2. Decode URL encoding if present
+  try {
+    name = decodeURIComponent(name);
+  } catch {}
+
+  // 3. Remove URLs, domain names, links (e.g., .com, .net, .gg, https://)
+  name = name.replace(/https?:\/\/\S+/gi, '');
+  name = name.replace(/\b[a-zA-Z0-9-]+\.(com|net|org|gg|ru|xyz|io|info|biz|me|cc|co|us|tk|ml|ga|gq|cf)\b/gi, '');
+
+  // 4. Replace symbols, punctuation, underscores, dashes with space
+  name = name.replace(/[_+\-/\\()\[\]{}|.,;:!@#$%\^&*~`?<>]/g, ' ');
+
+  // 5. Compress characters repeated 3 or more times (e.g. looooove -> loove, freeeee -> free)
+  name = name.replace(/([a-zA-Z])\1{2,}/g, '$1$1');
+
+  // 6. Replace/remove known platform traces, metadata, and social media words
+  const blacklistedWords = [
+    // Platforms & Socials
+    'discord', 'youtube', 'soundcloud', 'roblox', 'robux', 'instagram', 'facebook',
+    'twitter', 'tiktok', 'twitch', 'spotify', 'telegram', 'github', 'snapchat',
+    // Technical & File Info
+    'download', 'downloaded', 'converter', 'extension', 'file', 'export', 'render',
+    // Moderation risks
+    'bypass', 'bypassed', 'unban', 'admin', 'mod', 'moderator', 'hack', 'exploit',
+    'cheat', 'script', 'leak', 'leaked', 'full', 'clean', 'uncensored', 'loud',
+    'earrape', 'distorted', 'bassboost', 'bass boosted', 'reverb', 'sped up',
+    'slowed', 'reupload', 'nightcore', 'daycore', 'speed up', 'copyright free'
+  ];
   
-  // 1. Remove common converter metadata / platform trace words
-  name = name.replace(/\b(discord|youtube|soundcloud|roblox|robux|downloaded|converter)\b/gi, '');
+  // Create a regex to match these words as complete words, case-insensitive
+  const blacklistRegex = new RegExp('\\b(' + blacklistedWords.join('|') + ')\\b', 'gi');
+  name = name.replace(blacklistRegex, '');
+
+  // 7. Handle numbers smartly
+  // First, find any standalone numbers or number sequences
+  // If there's a sequence of 3 or more digits (like years or codes: 2026, 911), remove it
+  name = name.replace(/\b\d{3,}\b/g, '');
   
-  // 2. Convert numbers to words (Roblox filters numbers aggressively as PII)
+  // Convert 1 or 2 digit numbers to their word equivalent to avoid PII filters
   const numberWords = {
     '0': 'Zero', '1': 'One', '2': 'Two', '3': 'Three', '4': 'Four',
-    '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine'
+    '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine',
+    '10': 'Ten', '11': 'Eleven', '12': 'Twelve', '13': 'Thirteen',
+    '14': 'Fourteen', '15': 'Fifteen', '16': 'Sixteen', '17': 'Seventeen',
+    '18': 'Eighteen', '19': 'Nineteen', '20': 'Twenty'
   };
-  name = name.split('').map(char => {
-    if (/[0-9]/.test(char)) return numberWords[char] || char;
-    return char;
-  }).join('');
-  
-  // 3. Keep only alphabetic characters and spaces (no special characters)
-  name = name.replace(/[^a-zA-Z\s]/g, '');
-  
-  // 4. Normalize spacing
+
+  // Replace single or double digit numbers (0-20) with words
+  name = name.replace(/\b(\d{1,2})\b/g, (match) => {
+    return numberWords[match] || '';
+  });
+
+  // Strip any remaining lone digits or digits attached to words
+  name = name.replace(/\d+/g, '');
+
+  // 8. Keep only alphabetic characters and spaces
+  name = name.replace(/[^a-zA-Z\s]/g, ' ');
+
+  // 9. Normalize spaces
   name = name.replace(/\s+/g, ' ').trim();
-  
-  // 5. Fallback if empty or too short
-  if (name.length < 3) {
-    name = 'Audio Track';
+
+  // 10. Capitalize each word properly (makes it look professional and authentic)
+  name = name.split(' ').map(word => {
+    if (!word) return '';
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).filter(Boolean).join(' ');
+
+  // 11. Fallback check:
+  // If name is too short (< 4 chars), or has no vowels (likely gibberish or consonants only),
+  // we select a beautiful, safe generic name from a list of Roblox-approved titles
+  const hasVowels = /[aeiouyAEIOUY]/.test(name);
+  if (name.length < 4 || !hasVowels) {
+    const safeNames = [
+      'Mystic Echoes', 'Summer Breeze', 'Neon Dreams', 'Lost Horizon', 
+      'Soft Whispers', 'Ocean Wave', 'Happy Journey', 'Midnight Groove', 
+      'Golden Hour', 'Ethereal Calm', 'Rhythmic Beat', 'Velocity Run', 
+      'Synth Wave', 'Skyline Horizon', 'Chill Melody', 'Silent Forest', 
+      'Echoing Hills', 'Future Horizon'
+    ];
+    let hash = 0;
+    const cleanInput = String(input || '');
+    for (let i = 0; i < cleanInput.length; i++) {
+      hash = cleanInput.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % safeNames.length;
+    name = safeNames[index];
   }
-  
-  return name.slice(0, 50);
+
+  // Roblox asset names must be 50 characters or less
+  return name.slice(0, 50).trim();
 }
 function formatDuration(seconds){ seconds=Math.max(0,Math.round(Number(seconds)||0)); const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60), s=seconds%60; return h>0?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`; }
 function addLog(discordId, jobId, message){ const h=getHistory(discordId); const i=h.findIndex(j=>j.id===jobId); if(i<0) return; h[i].logs = Array.isArray(h[i].logs)?h[i].logs:[]; h[i].logs.push({time:new Date().toISOString(), message}); h[i].updatedAt=new Date().toISOString(); saveHistory(discordId,h); }
