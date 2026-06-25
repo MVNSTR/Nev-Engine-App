@@ -724,6 +724,54 @@ app.post('/api/assets/:assetId/grant', requireAuth, async (req,res)=>{
   }catch(e){ res.status(400).json({error:e.message}); }
 });
 
+app.get('/api/fetch-title', requireAuth, async (req, res) => {
+  const url = String(req.query.url || '').trim();
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+  
+  if (IS_CLIENT) {
+    try {
+      const r = await centralFetch(`/api/fetch-title?url=${encodeURIComponent(url)}`, { token: req.authToken });
+      return res.status(r.status).json(r.json);
+    } catch (e) {
+      return res.status(502).json({ error: 'Server pusat tak terjangkau.' });
+    }
+  }
+
+  try {
+    const normalized = normalizeMediaUrl(url);
+    const userCookiesPath = userFile(req.user.id, 'youtube-cookies.txt');
+    const hasUserCookies = fs.existsSync(userCookiesPath);
+    const hasGlobalCookies = fs.existsSync(YT_COOKIES_FILE);
+    const cookiesPath = hasUserCookies ? userCookiesPath : (hasGlobalCookies ? YT_COOKIES_FILE : null);
+
+    const args = [
+      '--no-playlist',
+      '--force-ipv4',
+      '--js-runtimes',
+      `deno:${BIN.deno}`,
+      '--remote-components',
+      'ejs:github',
+      '--print',
+      'title'
+    ];
+
+    if (cookiesPath) {
+      args.unshift('--cookies', cookiesPath);
+    }
+    
+    args.push(normalized);
+
+    const resObj = await run(BIN.ytdlp, args);
+    const title = resObj.stdout.trim();
+    if (!title) {
+      throw new Error('Title could not be extracted');
+    }
+    res.json({ title });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to fetch title' });
+  }
+});
+
 app.post('/api/jobs/upload', requireAuth, upload.single('audio'), async (req,res)=>{ if(!req.file) return res.status(400).json({error:'Audio file is required'}); const lim=await consumeLimit(req,'convert'); if(lim) return res.status(429).json({error:lim}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||path.parse(req.file.originalname).name); const job=createJob(req.user.id,{title,sourceType:'upload',originalName:req.file.originalname,speed,amplify}); processJob(req.user.id,job.id,req.file.path,title,speed,amplify); res.json({jobId:job.id}); });
 app.post('/api/jobs/link', requireAuth, async (req,res)=>{ const url=String(req.body.url||'').trim(); if(!url||!isSupportedLink(url)) return res.status(400).json({error:'Use a YouTube or SoundCloud link'}); const lim=await consumeLimit(req,'convert'); if(lim) return res.status(429).json({error:lim}); const speed=parseFloat(req.body.speed||'2.326'), amplify=parseFloat(req.body.amplify||'-4'); const title=sanitizeTitle(req.body.title||'Downloaded Audio'); const job=createJob(req.user.id,{title,sourceType:'link',sourceUrl:normalizeMediaUrl(url),originalName:'Downloaded Audio',speed,amplify}); processLinkJob(req.user.id,job.id,normalizeMediaUrl(url),title,speed,amplify); res.json({jobId:job.id}); });
 app.post('/api/jobs/:id/upload-roblox', requireAuth, async (req,res)=>{ const lim=await consumeLimit(req,'upload'); if(lim) return res.status(429).json({error:lim}); uploadJob(req.user.id,{jobId:req.params.id,accountId:req.body.accountId,target:req.body.target==='group'?'group':'user',assetName:req.body.assetName,description:req.body.description}).catch(e=>{ updateJob(req.user.id,req.params.id,{robloxStatus:'failed'}); addLog(req.user.id,req.params.id,`Roblox upload error: ${e.message}`); }); res.json({ok:true}); });

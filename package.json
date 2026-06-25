@@ -1,6 +1,6 @@
 {
   "name": "nev-discord-audio-engine",
-  "version": "2.7.5",
+  "version": "2.7.6",
   "description": "NEV Audio Engine - Roblox audio converter & uploader",
   "author": "NEV",
   "main": "electron/main.js",

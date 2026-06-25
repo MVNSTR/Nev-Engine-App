@@ -706,10 +706,53 @@ async function pingNetwork(){
 function setMode(m){mode=m;const ub=$('uploadBox'),lb=$('linkBox');if(ub)ub.style.display=m==='upload'?'block':'none';if(lb)lb.style.display=m==='link'?'block':'none';}
 document.querySelectorAll('.preset button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.preset button').forEach(x=>x.classList.remove('active'));b.classList.add('active');const s=Number(b.dataset.speed);$('speedInput').value=s;$('speedText').innerText=s+'x';$('playbackText').innerText=(1/s).toFixed(2);});
 $('volumeSlider').oninput=e=>{$('volumeText').innerText=(Number(e.target.value)>0?'+':'')+e.target.value+'dB';};
-$('audioInput').onchange=()=>{if($('audioInput').files.length)$('fileName').innerText=$('audioInput').files[0].name;};
+function setAudioTitleFromFile(file) {
+  if (file && !$('titleInput').value) {
+    const name = file.name;
+    const nameWithoutExt = name.replace(/\.[^/.]+$/, "");
+    $('titleInput').value = nameWithoutExt;
+  }
+}
+$('audioInput').onchange=()=>{
+  if($('audioInput').files.length) {
+    const file = $('audioInput').files[0];
+    $('fileName').innerText=file.name;
+    setAudioTitleFromFile(file);
+  }
+};
 ['dragenter','dragover'].forEach(e=>$('dropzone').addEventListener(e,x=>{x.preventDefault();$('dropzone').classList.add('drag');}));
 ['dragleave','drop'].forEach(e=>$('dropzone').addEventListener(e,x=>{x.preventDefault();$('dropzone').classList.remove('drag');}));
-$('dropzone').addEventListener('drop',e=>{if(e.dataTransfer.files.length){$('audioInput').files=e.dataTransfer.files;$('fileName').innerText=e.dataTransfer.files[0].name;}});
+$('dropzone').addEventListener('drop',e=>{
+  if(e.dataTransfer.files.length){
+    const file = e.dataTransfer.files[0];
+    $('audioInput').files=e.dataTransfer.files;
+    $('fileName').innerText=file.name;
+    setAudioTitleFromFile(file);
+  }
+});
+
+let fetchTitleTimeout = null;
+$('urlInput').addEventListener('input', () => {
+  clearTimeout(fetchTitleTimeout);
+  fetchTitleTimeout = setTimeout(async () => {
+    const url = $('urlInput').value.trim();
+    if (url && (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('soundcloud.com'))) {
+      const origPlaceholder = $('titleInput').placeholder;
+      $('titleInput').placeholder = "Fetching title...";
+      try {
+        const res = await fetch(`/api/fetch-title?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (res.ok && data.title && !$('titleInput').value) {
+          $('titleInput').value = data.title;
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        $('titleInput').placeholder = origPlaceholder;
+      }
+    }
+  }, 800);
+});
 $('convertForm').onsubmit=async e=>{e.preventDefault();$('convertBtn').disabled=true;$('convertBtn').innerText='Processing...';setProcess('Converting','Menyiapkan job...','active');renderSteps(mode==='link'?['Download','Convert','Selesai']:['Upload','Convert','Selesai'],0,false);renderedLogCount=0;$('logBox').innerHTML='<div class="log-line"><span class="log-time">'+new Date().toLocaleTimeString()+'</span>Initializing job...</div>';try{let res;if(mode==='upload'){res=await fetch('/api/jobs/upload',{method:'POST',body:new FormData($('convertForm'))});}else{res=await fetch('/api/jobs/link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$('titleInput').value,url:$('urlInput').value,speed:$('speedInput').value,amplify:$('volumeSlider').value})});}const data=await res.json();if(!res.ok)throw new Error(data.error||'Gagal memulai job.');activeJobId=data.jobId;refreshMe();startPollingJob(activeJobId);}catch(err){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';setProcess('Failed',err.message,'error');renderedLogCount=0;$('logBox').innerHTML='<div class="log-line">'+escapeHtml(err.message)+'</div>';}};
 function startPollingJob(id){if(jobPoller)clearInterval(jobPoller);renderedLogCount=0;pollJob(id);jobPoller=setInterval(()=>pollJob(id),1500);}
 async function pollJob(id){const res=await fetch('/api/jobs/'+id);const job=await res.json();if(!res.ok)return;activeJobData=job;renderLogs(job.logs||[]);renderResult(job);renderCurrentOutput();updateProcess(job);await loadHistory(false);updateSongSelect();if(job.status==='done'&&!job.filesExpired)$('uploadRobloxBtn').disabled=false;if((job.status==='done'||job.status==='failed')&&job.robloxStatus!=='processing'){$('convertBtn').disabled=false;$('convertBtn').innerText='Convert Audio';$('uploadRobloxBtn').innerText='Upload ke Roblox';clearInterval(jobPoller);jobPoller=null;loadSavedNotes();}}
