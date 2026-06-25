@@ -303,7 +303,35 @@ function discordCfg(){
 
 function sanitizeTitle(input){ return String(input||'Untitled Audio').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g,'').replace(/\s+/g,' ').slice(0,90) || 'Untitled Audio'; }
 function sanitizeFileName(input){ return sanitizeTitle(input).replace(/[^\w\s.\-()[\]]/g,'').trim() || 'Untitled Audio'; }
-function sanitizeRobloxName(input){ return sanitizeTitle(input).slice(0,50); }
+function sanitizeRobloxName(input) {
+  let name = sanitizeTitle(input);
+  
+  // 1. Remove common converter metadata / platform trace words
+  name = name.replace(/\b(discord|youtube|soundcloud|roblox|robux|downloaded|converter)\b/gi, '');
+  
+  // 2. Convert numbers to words (Roblox filters numbers aggressively as PII)
+  const numberWords = {
+    '0': 'Zero', '1': 'One', '2': 'Two', '3': 'Three', '4': 'Four',
+    '5': 'Five', '6': 'Six', '7': 'Seven', '8': 'Eight', '9': 'Nine'
+  };
+  name = name.split('').map(char => {
+    if (/[0-9]/.test(char)) return numberWords[char] || char;
+    return char;
+  }).join('');
+  
+  // 3. Keep only alphabetic characters and spaces (no special characters)
+  name = name.replace(/[^a-zA-Z\s]/g, '');
+  
+  // 4. Normalize spacing
+  name = name.replace(/\s+/g, ' ').trim();
+  
+  // 5. Fallback if empty or too short
+  if (name.length < 3) {
+    name = 'Audio Track';
+  }
+  
+  return name.slice(0, 50);
+}
 function formatDuration(seconds){ seconds=Math.max(0,Math.round(Number(seconds)||0)); const h=Math.floor(seconds/3600), m=Math.floor((seconds%3600)/60), s=seconds%60; return h>0?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`; }
 function addLog(discordId, jobId, message){ const h=getHistory(discordId); const i=h.findIndex(j=>j.id===jobId); if(i<0) return; h[i].logs = Array.isArray(h[i].logs)?h[i].logs:[]; h[i].logs.push({time:new Date().toISOString(), message}); h[i].updatedAt=new Date().toISOString(); saveHistory(discordId,h); }
 function getJob(discordId, jobId){ return getHistory(discordId).find(j=>j.id===jobId)||null; }
