@@ -746,8 +746,41 @@ app.get('/api/fetch-title', requireAuth, async (req, res) => {
     }
   }
 
+  const getOembedTitle = async (targetUrl) => {
+    const lower = targetUrl.toLowerCase();
+    let oembedUrl = '';
+    if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
+      oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(targetUrl)}&format=json`;
+    } else if (lower.includes('soundcloud.com')) {
+      oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(targetUrl)}&format=json`;
+    }
+
+    if (oembedUrl) {
+      const response = await fetch(oembedUrl);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.title) {
+          return data.title;
+        }
+      }
+    }
+    return null;
+  };
+
   try {
     const normalized = normalizeMediaUrl(url);
+
+    // 1. Try public oEmbed API first (extremely fast, no cookies required, bypasses bot check)
+    try {
+      const title = await getOembedTitle(normalized);
+      if (title) {
+        return res.json({ title });
+      }
+    } catch (oeErr) {
+      console.error('oEmbed fetch failed, falling back to yt-dlp:', oeErr.message);
+    }
+
+    // 2. Fallback to yt-dlp
     const userCookiesPath = userFile(req.user.id, 'youtube-cookies.txt');
     const hasUserCookies = fs.existsSync(userCookiesPath);
     const hasGlobalCookies = fs.existsSync(YT_COOKIES_FILE);
