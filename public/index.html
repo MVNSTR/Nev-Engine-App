@@ -744,9 +744,14 @@ $('urlInput').addEventListener('input', () => {
         const data = await res.json();
         if (res.ok && data.title && !$('titleInput').value) {
           $('titleInput').value = data.title;
+        } else if (!res.ok && !$('titleInput').value) {
+          $('titleInput').value = "Downloaded Audio";
         }
       } catch (e) {
         console.error(e);
+        if (!$('titleInput').value) {
+          $('titleInput').value = "Downloaded Audio";
+        }
       } finally {
         $('titleInput').placeholder = origPlaceholder;
       }
